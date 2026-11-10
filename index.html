@@ -1,382 +1,278 @@
-<!doctype html>
-<html lang="en">
+
+<!DOCTYPE html>
+<html lang="my">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#080d18">
-  <title>NEON RUSH — Arcade Racing</title>
-  <style>
-    :root {
-      --bg: #080d18;
-      --panel: rgba(16, 25, 43, .88);
-      --line: rgba(148, 180, 220, .14);
-      --muted: #8fa2bd;
-      --text: #edf5ff;
-      --cyan: #52e5ff;
-      --blue: #398cff;
-      --orange: #ff9d55;
-    }
-    * { box-sizing: border-box; }
-    html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-    body {
-      min-height: 100svh;
-      background:
-        radial-gradient(ellipse at 50% -12%, rgba(35, 107, 190, .24), transparent 48%),
-        radial-gradient(ellipse at 100% 70%, rgba(25, 193, 214, .08), transparent 38%),
-        #080d18;
-      display: flex; justify-content: center; padding: 22px 14px 30px;
-    }
-    .app { width: min(100%, 520px); }
-    .topbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin: 0 2px 16px; }
-    .brand { display:flex; align-items:center; gap:11px; }
-    .brand-mark {
-      width: 39px; height: 39px; display:grid; place-items:center; border-radius:13px;
-      color:#07101c; font-size:20px; font-weight:1000;
-      background:linear-gradient(145deg, #7af0ff, #398cff);
-      box-shadow:0 0 28px rgba(82,229,255,.22);
-    }
-    .brand-name { font-size:14px; font-weight:900; letter-spacing:.22em; }
-    .brand-sub { color:var(--muted); font-size:9px; letter-spacing:.18em; margin-top:3px; }
-    .status { color:#a8bad2; font-size:10px; letter-spacing:.12em; border:1px solid var(--line); padding:8px 10px; border-radius:999px; background:rgba(12,20,35,.7); }
-    .dashboard {
-      display:grid; grid-template-columns:1fr 1fr 1fr; gap:9px; margin-bottom:10px;
-    }
-    .stat {
-      background:linear-gradient(150deg, rgba(20,32,53,.96), rgba(11,19,34,.9));
-      border:1px solid var(--line); border-radius:15px; padding:11px 13px;
-      box-shadow:0 10px 28px rgba(0,0,0,.13); min-width:0;
-    }
-    .stat-label { color:var(--muted); font-size:9px; letter-spacing:.16em; font-weight:800; }
-    .stat-value { font-size:20px; font-weight:850; letter-spacing:-.04em; margin-top:5px; white-space:nowrap; }
-    .stat-value small { color:var(--muted); font-size:10px; letter-spacing:0; font-weight:700; }
-    .game-shell {
-      position:relative; overflow:hidden; border-radius:22px; border:1px solid rgba(123,178,235,.22);
-      background:#0a1422; box-shadow:0 22px 70px rgba(0,0,0,.38), 0 0 36px rgba(40,137,220,.08);
-      isolation:isolate;
-    }
-    canvas { display:block; width:100%; height:auto; aspect-ratio:7/12; touch-action:none; }
-    .scanline { pointer-events:none; position:absolute; inset:0; z-index:1; opacity:.12; background:repeating-linear-gradient(to bottom, transparent 0 3px, rgba(170,220,255,.08) 4px); mix-blend-mode:screen; }
-    .overlay {
-      position:absolute; inset:0; z-index:3; display:flex; align-items:center; justify-content:center; padding:24px;
-      background:linear-gradient(180deg, rgba(5,10,19,.35), rgba(5,10,19,.82));
-      backdrop-filter:blur(5px);
-    }
-    .overlay.hidden { display:none; }
-    .modal { width:min(100%, 330px); text-align:center; padding:25px 21px 22px; border-radius:21px; border:1px solid rgba(137,195,255,.22); background:linear-gradient(145deg, rgba(17,31,52,.96), rgba(8,17,31,.97)); box-shadow:0 18px 55px rgba(0,0,0,.42); }
-    .eyebrow { color:var(--cyan); font-size:9px; letter-spacing:.28em; font-weight:900; }
-    .modal h1 { margin:9px 0 7px; font-size:clamp(29px, 8vw, 42px); line-height:1; letter-spacing:-.055em; font-weight:1000; }
-    .modal p { color:#a8bad2; font-size:12px; line-height:1.65; margin:10px auto 18px; max-width:255px; }
-    .primary {
-      width:100%; border:0; border-radius:12px; padding:14px 16px; color:#06111d; font-weight:950; font-size:12px; letter-spacing:.13em;
-      background:linear-gradient(100deg, #75f0ff, #4a9dff); box-shadow:0 8px 24px rgba(63,166,255,.24); cursor:pointer;
-    }
-    .primary:active { transform:translateY(1px); }
-    .secondary { background:transparent; color:#c6d5e8; border:1px solid var(--line); border-radius:10px; padding:10px 14px; font-size:10px; font-weight:800; letter-spacing:.1em; cursor:pointer; }
-    .modal-actions { display:flex; gap:8px; }
-    .modal-actions .primary { flex:1; }
-    .hint { color:#8196b2; font-size:10px; line-height:1.6; margin-top:14px; }
-    .toolbar { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:11px 2px 0; }
-    .tool-btn { border:1px solid var(--line); color:#aebfd5; background:rgba(13,22,38,.78); border-radius:10px; padding:9px 11px; font-size:10px; font-weight:800; letter-spacing:.08em; cursor:pointer; }
-    .tool-btn:active { background:#172943; }
-    .controls { display:none; grid-template-columns:1fr 1fr; gap:12px; margin-top:12px; }
-    .control-btn {
-      user-select:none; -webkit-user-select:none; touch-action:none; height:58px; border-radius:15px;
-      border:1px solid rgba(121,184,240,.22); background:linear-gradient(145deg, rgba(21,39,64,.95), rgba(11,21,37,.95));
-      color:#d9f7ff; font-size:21px; font-weight:900; box-shadow:0 8px 20px rgba(0,0,0,.18);
-    }
-    .control-btn:active, .control-btn.pressed { border-color:rgba(82,229,255,.7); background:rgba(24,75,100,.8); }
-    .footer { text-align:center; color:#61748e; font-size:9px; letter-spacing:.12em; margin-top:15px; }
-    @media (hover:none), (max-width:700px) { .controls { display:grid; } body { padding-top:14px; } }
-    @media (max-width:380px) { .stat { padding:9px 10px; } .stat-value { font-size:17px; } .brand-name { font-size:12px; } }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MINGALAR - Myanmar Mystery Adventure</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Myanmar:wght@400;600;700&display=swap');
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: #17101f;
+  color: white;
+  font-family: 'Noto Sans Myanmar', sans-serif;
+}
+
+.container {
+  max-width: 1100px;
+  margin: auto;
+  padding: 20px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  color: #ffd36a;
+  font-weight: bold;
+}
+
+.main {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 25px;
+  align-items: center;
+  min-height: 85vh;
+}
+
+.character {
+  height: 650px;
+  overflow: hidden;
+  border-radius: 25px;
+}
+
+.character img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.panel {
+  background: #ffffff12;
+  padding: 28px;
+  border-radius: 25px;
+}
+
+h1 { color: #ffd36a; }
+
+.speech {
+  background: white;
+  color: #321b3b;
+  padding: 20px;
+  border-radius: 20px;
+  line-height: 2;
+  margin: 20px 0;
+}
+
+button {
+  width: 100%;
+  padding: 15px;
+  margin: 7px 0;
+  border: none;
+  border-radius: 15px;
+  font-family: inherit;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.start { background: #ffbd42; color: #321b3b; }
+.choice { background: #55408d; color: white; }
+.voice { background: #e86ab5; color: white; }
+
+.hidden { display: none; }
+
+@media(max-width:700px) {
+  .main { grid-template-columns: 1fr; }
+  .character { height: 400px; }
+}
+</style>
 </head>
+
 <body>
-  <main class="app">
-    <header class="topbar">
-      <div class="brand">
-        <div class="brand-mark">N</div>
-        <div>
-          <div class="brand-name">NEON RUSH</div>
-          <div class="brand-sub">ARCADE MOTORSPORT</div>
-        </div>
-      </div>
-      <div class="status">● &nbsp; SYSTEM ONLINE</div>
-    </header>
+<div class="container">
 
-    <section class="dashboard" aria-label="Game statistics">
-      <div class="stat"><div class="stat-label">SCORE</div><div class="stat-value" id="score">000000</div></div>
-      <div class="stat"><div class="stat-label">SPEED</div><div class="stat-value"><span id="speed">0</span> <small>KM/H</small></div></div>
-      <div class="stat"><div class="stat-label">BEST</div><div class="stat-value" id="best">000000</div></div>
-    </section>
+<header class="header">
+  <div>✦ MINGALAR</div>
+  <div>LEVEL 01 | ⭐ <span id="score">0</span></div>
+</header>
 
-    <section class="game-shell">
-      <canvas id="game" width="420" height="720" aria-label="Neon Rush racing game"></canvas>
-      <div class="scanline"></div>
-      <div class="overlay" id="overlay">
-        <div class="modal">
-          <div class="eyebrow" id="modalEyebrow">READY TO RACE?</div>
-          <h1 id="modalTitle">NEON<br>RUSH</h1>
-          <p id="modalText">Dodge traffic, build your speed and chase the high score. Stay sharp — the road gets faster.</p>
-          <button class="primary" id="startBtn">START ENGINE&nbsp; →</button>
-          <div class="hint" id="modalHint">PC: ← → or A / D &nbsp; • &nbsp; Mobile: use the control pads</div>
-        </div>
-      </div>
-    </section>
+<div class="main">
 
-    <div class="toolbar">
-      <button class="tool-btn" id="pauseBtn">Ⅱ &nbsp; PAUSE</button>
-      <button class="tool-btn" id="soundBtn">♫ &nbsp; SOUND ON</button>
-      <button class="tool-btn" id="restartBtn">↻ &nbsp; RESTART</button>
-    </div>
+<div class="character">
+  <img src="assets/mm-girl.jpg" alt="မမလေး">
+</div>
 
-    <div class="controls" aria-label="Touch controls">
-      <button class="control-btn" id="leftBtn" aria-label="Steer left">←</button>
-      <button class="control-btn" id="rightBtn" aria-label="Steer right">→</button>
-    </div>
-    <div class="footer">BUILT FOR SPEED &nbsp; • &nbsp; NEON RUSH v1.0</div>
-  </main>
+<div class="panel">
 
-  <script>
-  (() => {
-    "use strict";
-    const canvas = document.getElementById("game");
-    const ctx = canvas.getContext("2d");
-    const W = canvas.width, H = canvas.height;
-    const $ = id => document.getElementById(id);
-    const overlay = $("overlay");
-    const scoreEl = $("score"), speedEl = $("speed"), bestEl = $("best");
-    const LANES = [112, 210, 308];
-    const ROAD = { left: 55, right: 365 };
-    let state = "ready", lastTime = 0, elapsed = 0, score = 0;
-    let speed = 230, spawnTimer = 0, roadOffset = 0, traffic = [];
-    let best = Number(localStorage.getItem("neonRushBest") || 0);
-    let soundOn = true, audioCtx = null;
-    let keys = { left:false, right:false };
-    let player = { x: LANES[1], y: 586, targetX: LANES[1], tilt: 0 };
-    bestEl.textContent = format(best);
+<section id="welcome">
+  <h1>မင်္ဂလာပါရှင့် 💗</h1>
 
-    function format(n) { return Math.floor(n).toString().padStart(6, "0"); }
-    function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
-    function roundedRect(c, x, y, w, h, r) {
-      c.beginPath(); c.roundRect(x, y, w, h, r); c.fill();
+  <div class="speech">
+    <b>မမလေး</b>
+    <p>
+      မင်္ဂလာပါရှင့်။ ကျွန်မနာမည် မမလေးပါ။
+      ဒီနေ့ စိတ်ဝင်စားစရာ လျှို့ဝှက်ချက်လေးတစ်ခု
+      အတူတူရှာကြည့်ကြမလားရှင့်။
+    </p>
+  </div>
+
+  <button class="voice" onclick="speak('မင်္ဂလာပါရှင့်။ ကျွန်မနာမည် မမလေးပါ။')">
+    🔊 အသံနားထောင်မယ်
+  </button>
+
+  <button class="start" onclick="startGame()">
+    စတင်စူးစမ်းမယ် →
+  </button>
+</section>
+
+<section id="game" class="hidden">
+  <h1 id="title">အိမ်ဟောင်းရဲ့ လျှို့ဝှက်ချက်</h1>
+
+  <div class="speech">
+    <p id="story"></p>
+    <b>မမလေး</b>
+    <p id="dialogue"></p>
+  </div>
+
+  <div id="choices"></div>
+
+  <p>🔎 တွေ့ရှိထားသော သဲလွန်စ: <span id="clues">0</span></p>
+</section>
+
+<section id="ending" class="hidden">
+  <h1>ဂုဏ်ယူပါတယ်ရှင့်! 🎉</h1>
+  <p>လျှို့ဝှက်ချက်ကို ဖြေရှင်းနိုင်ခဲ့ပါပြီ။</p>
+  <button class="start" onclick="location.reload()">
+    နောက်တစ်ခေါက် ကစားမယ်
+  </button>
+</section>
+
+</div>
+</div>
+</div>
+
+<script>
+function speak(text) {
+  if (!('speechSynthesis' in window)) {
+    alert('ဒီ Browser မှာ အသံစနစ်မရနိုင်ပါ။');
+    return;
+  }
+
+  speechSynthesis.cancel();
+
+  const voice = new SpeechSynthesisUtterance(text);
+  voice.lang = 'my-MM';
+  voice.rate = 0.9;
+  voice.pitch = 1.1;
+
+  const voices = speechSynthesis.getVoices();
+  const burmese = voices.find(v =>
+    v.lang.toLowerCase().startsWith('my')
+  );
+
+  if (burmese) voice.voice = burmese;
+
+  speechSynthesis.speak(voice);
+}
+
+let score = 0;
+let step = 0;
+let clues = 0;
+
+const missions = [
+  {
+    title: 'အိမ်ဟောင်းရဲ့ တံခါး',
+    story: 'ဒီအိမ်ဟောင်းထဲမှာ လျှို့ဝှက်ချက်တစ်ခု ရှိနေတယ်။',
+    dialogue: 'ဘယ်နေရာကို အရင်စစ်ကြည့်မလဲရှင့်။',
+    choices: [
+      ['ပန်းအိုးအောက်ကို ကြည့်မယ်', 'သော့လေးတစ်ချောင်း တွေ့ပြီရှင့်။', true],
+      ['တံခါးကို အတင်းဖွင့်မယ်', 'တံခါးက ဖွင့်မရသေးဘူးရှင့်။', false]
+    ]
+  },
+  {
+    title: 'စာကြည့်ခန်း',
+    story: 'အိမ်ထဲမှာ စာအုပ်တစ်အုပ် တွေ့ရတယ်။',
+    dialogue: 'စာအုပ်ထဲမှာ ဘာရှိမလဲရှင့်။',
+    choices: [
+      ['စာအုပ်ကို ဖတ်မယ်', 'လမင်းပုံရှိတဲ့နေရာမှာ အဖြေရှိတယ်။', true],
+      ['ပြတင်းပေါက်ကို ကြည့်မယ်', 'ဘာမှမတွေ့သေးဘူးရှင့်။', false]
+    ]
+  },
+  {
+    title: 'နောက်ဆုံး ပဟေဠိ',
+    story: 'သေတ္တာတစ်လုံးပေါ်မှာ နံပါတ်သုံးလုံး ထည့်ဖို့နေရာရှိတယ်။',
+    dialogue: 'အဖြေက 2 - 4 - 8 ဖြစ်မယ်ထင်တယ်ရှင့်။',
+    choices: [
+      ['2 - 4 - 8', 'မှန်သွားပြီရှင့်။ သေတ္တာပွင့်သွားပြီ။', true],
+      ['4 - 2 - 8', 'မမှန်သေးဘူးရှင့်။ ထပ်စဉ်းစားပါ။', false]
+    ]
+  }
+];
+
+function startGame() {
+  document.getElementById('welcome').classList.add('hidden');
+  document.getElementById('game').classList.remove('hidden');
+
+  showMission();
+  speak('စလိုက်ကြရအောင်ရှင့်။');
+}
+
+function showMission() {
+  const m = missions[step];
+
+  document.getElementById('title').textContent = m.title;
+  document.getElementById('story').textContent = m.story;
+  document.getElementById('dialogue').textContent = m.dialogue;
+
+  const area = document.getElementById('choices');
+  area.innerHTML = '';
+
+  m.choices.forEach(c => {
+    const btn = document.createElement('button');
+    btn.className = 'choice';
+    btn.textContent = c[0];
+
+    btn.onclick = () => selectChoice(c);
+
+    area.appendChild(btn);
+  });
+}
+
+function selectChoice(c) {
+  document.getElementById('dialogue').textContent = c[1];
+
+  speak(c[1]);
+
+  if (!c[2]) return;
+
+  clues++;
+  score += 100;
+
+  document.getElementById('score').textContent = score;
+  document.getElementById('clues').textContent = clues;
+
+  setTimeout(() => {
+    step++;
+
+    if (step >= missions.length) {
+      document.getElementById('game').classList.add('hidden');
+      document.getElementById('ending').classList.remove('hidden');
+      speak('ဂုဏ်ယူပါတယ်ရှင့်။ လျှို့ဝှက်ချက်ကို ဖြေရှင်းနိုင်ခဲ့ပြီ။');
+    } else {
+      showMission();
     }
+  }, 1200);
+}
 
-    function beep(freq=440, duration=.07, type="sine", volume=.035) {
-      if (!soundOn) return;
-      try {
-        audioCtx ||= new (window.AudioContext || window.webkitAudioContext)();
-        if (audioCtx.state === "suspended") audioCtx.resume();
-        const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
-        osc.type = type; osc.frequency.value = freq;
-        gain.gain.setValueAtTime(volume, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(.001, audioCtx.currentTime + duration);
-        osc.connect(gain); gain.connect(audioCtx.destination);
-        osc.start(); osc.stop(audioCtx.currentTime + duration);
-      } catch (_) {}
-    }
+window.addEventListener('load', () => {
+  setTimeout(() => {
+    speak('မင်္ဂလာပါရှင့်။ ကျွန်မနာမည် လီဆာပါ။');
+  }, 800);
+});
+</script>
 
-    function drawBackground(dt) {
-      const bg = ctx.createLinearGradient(0, 0, 0, H);
-      bg.addColorStop(0, "#10233a"); bg.addColorStop(.55, "#0b1929"); bg.addColorStop(1, "#091321");
-      ctx.fillStyle = bg; ctx.fillRect(0,0,W,H);
-
-      // Distant city silhouettes
-      for (let i=0; i<13; i++) {
-        const x = i*36 - 5, h = 65 + ((i*47)%90);
-        ctx.fillStyle = i%2 ? "rgba(35,74,105,.22)" : "rgba(25,55,84,.28)";
-        ctx.fillRect(x, 160-h, 25, h);
-        ctx.fillStyle = "rgba(90,196,235,.12)";
-        for (let wy=175-h; wy<145; wy+=19) ctx.fillRect(x+6,wy,3,5);
-      }
-
-      // Road surface
-      ctx.fillStyle = "#1b2938";
-      ctx.beginPath(); ctx.moveTo(ROAD.left+20,0); ctx.lineTo(ROAD.right-20,0); ctx.lineTo(ROAD.right, H); ctx.lineTo(ROAD.left,H); ctx.closePath(); ctx.fill();
-      const roadShade = ctx.createLinearGradient(ROAD.left,0,ROAD.right,0);
-      roadShade.addColorStop(0,"rgba(0,0,0,.23)"); roadShade.addColorStop(.5,"rgba(110,150,180,.035)"); roadShade.addColorStop(1,"rgba(0,0,0,.23)");
-      ctx.fillStyle = roadShade; ctx.fillRect(ROAD.left,0,ROAD.right-ROAD.left,H);
-
-      // Road edge glow and stripes
-      ctx.fillStyle = "#43d9f2"; ctx.globalAlpha=.72;
-      ctx.fillRect(ROAD.left-2,0,3,H); ctx.fillRect(ROAD.right-1,0,3,H);
-      ctx.globalAlpha=1;
-      const dashH=48, gap=34, cycle=dashH+gap, off=roadOffset%cycle;
-      ctx.fillStyle="rgba(185,213,232,.55)";
-      for (let y=-cycle+off; y<H; y+=cycle) {
-        ctx.fillRect(156,y,3,dashH); ctx.fillRect(261,y,3,dashH);
-      }
-      // Side reflectors
-      for (let y=-60+(roadOffset%100); y<H; y+=100) {
-        ctx.fillStyle="rgba(82,229,255,.48)"; ctx.fillRect(36,y,5,22); ctx.fillRect(379,y,5,22);
-      }
-    }
-
-    function drawCar(x,y,color,playerCar=false,tilt=0) {
-      ctx.save(); ctx.translate(x,y); ctx.rotate(tilt);
-      const w=playerCar?55:53, h=playerCar?100:96;
-      // shadow
-      ctx.fillStyle="rgba(0,0,0,.38)"; roundedRect(ctx,-w/2+4,-h/2+8,w,h,13);
-      // wheels
-      ctx.fillStyle="#070b11";
-      roundedRect(ctx,-w/2-4,-h/2+17,9,23,4); roundedRect(ctx,w/2-5,-h/2+17,9,23,4);
-      roundedRect(ctx,-w/2-4,h/2-40,9,23,4); roundedRect(ctx,w/2-5,h/2-40,9,23,4);
-      // body gradient
-      const body=ctx.createLinearGradient(-w/2,0,w/2,0);
-      body.addColorStop(0, shade(color,-24)); body.addColorStop(.5,color); body.addColorStop(1,shade(color,-38));
-      ctx.fillStyle=body; roundedRect(ctx,-w/2,-h/2,w,h,13);
-      // front/rear glass
-      ctx.fillStyle=playerCar?"#132e45":"#172638";
-      roundedRect(ctx,-w/2+8,-h/2+17,w-16,25,7);
-      roundedRect(ctx,-w/2+9,h/2-39,w-18,24,6);
-      // center roof detail
-      ctx.fillStyle="rgba(255,255,255,.12)"; roundedRect(ctx,-2,-h/2+47,4,18,2);
-      // headlights / tail lights
-      ctx.fillStyle=playerCar?"#baf8ff":"#ffb18b";
-      roundedRect(ctx,-w/2+5,-h/2+4,11,5,2); roundedRect(ctx,w/2-16,-h/2+4,11,5,2);
-      ctx.fillStyle=playerCar?"#ff5c79":"#ff4d61";
-      roundedRect(ctx,-w/2+5,h/2-8,11,4,2); roundedRect(ctx,w/2-16,h/2-8,11,4,2);
-      if (playerCar) {
-        ctx.shadowColor="#52e5ff"; ctx.shadowBlur=17;
-        ctx.strokeStyle="rgba(120,244,255,.8)"; ctx.lineWidth=1.4;
-        ctx.beginPath(); ctx.roundRect(-w/2+1,-h/2+1,w-2,h-2,12); ctx.stroke();
-        ctx.shadowBlur=0;
-        ctx.fillStyle="rgba(255,255,255,.78)"; roundedRect(ctx,-2,-h/2+7,4,5,2);
-      }
-      ctx.restore();
-    }
-    function shade(hex, amount) {
-      const n=parseInt(hex.slice(1),16), r=clamp((n>>16)+amount,0,255), g=clamp(((n>>8)&255)+amount,0,255), b=clamp((n&255)+amount,0,255);
-      return `rgb(${r},${g},${b})`;
-    }
-
-    function spawnTraffic() {
-      const lane = Math.floor(Math.random()*3);
-      const colors = ["#ff765f","#e6b94f","#9a83ff","#57d69a","#e7edf5"];
-      traffic.push({ x:LANES[lane], y:-120, color:colors[Math.floor(Math.random()*colors.length)], speed: .82+Math.random()*.18, lane });
-    }
-
-    function drawScene(dt) {
-      drawBackground(dt);
-      // Subtle road center glow
-      const glow=ctx.createLinearGradient(190,0,230,0);
-      glow.addColorStop(0,"rgba(75,190,255,0)"); glow.addColorStop(.5,"rgba(75,190,255,.035)"); glow.addColorStop(1,"rgba(75,190,255,0)");
-      ctx.fillStyle=glow; ctx.fillRect(80,0,260,H);
-      traffic.forEach(car=>drawCar(car.x,car.y,car.color,false));
-      drawCar(player.x,player.y,"#36cfff",true,player.tilt);
-      // Speed streaks at high speed
-      if (speed>430) {
-        ctx.strokeStyle="rgba(110,220,255,.13)"; ctx.lineWidth=2;
-        for(let i=0;i<9;i++){const x=70+((i*43+elapsed*80)%280); const y=(i*91+elapsed*speed*.7)%H; ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x,y+24);ctx.stroke();}
-      }
-    }
-
-    function update(dt) {
-      if (state!=="running") return;
-      elapsed += dt;
-      speed = Math.min(620, 230 + elapsed*9.5);
-      roadOffset += speed*dt;
-      score += dt*(speed/12);
-      const direction=(keys.right?1:0)-(keys.left?1:0);
-      player.targetX = clamp(player.targetX + direction*330*dt, 92, 328);
-      player.x += (player.targetX-player.x)*Math.min(1,dt*13);
-      player.tilt += ((direction*.12)-player.tilt)*Math.min(1,dt*9);
-
-      spawnTimer -= dt;
-      const interval=Math.max(.52,1.15-(speed-230)/850);
-      if(spawnTimer<=0){spawnTraffic();spawnTimer=interval*(.82+Math.random()*.38);}
-      for(let i=traffic.length-1;i>=0;i--){
-        const car=traffic[i]; car.y += speed*car.speed*dt;
-        if(car.y>H+130) traffic.splice(i,1);
-        else if(Math.abs(car.x-player.x)<43 && Math.abs(car.y-player.y)<78) { endGame(); return; }
-      }
-      scoreEl.textContent=format(score);
-      speedEl.textContent=Math.round(speed);
-      bestEl.textContent=format(best);
-    }
-
-    function render(time) {
-      const dt=Math.min((time-lastTime)/1000 || 0, .035); lastTime=time;
-      if(state==="running") update(dt);
-      drawScene(dt);
-      requestAnimationFrame(render);
-    }
-
-    function showOverlay(eyebrow,title,message,button,hint) {
-      $("modalEyebrow").textContent=eyebrow; $("modalTitle").innerHTML=title;
-      $("modalText").textContent=message; $("startBtn").textContent=button;
-      $("modalHint").textContent=hint; overlay.classList.remove("hidden");
-    }
-    function startGame() {
-      if(state==="running") return;
-      if(state==="ready" || state==="gameover") {
-        score=0; elapsed=0; speed=230; spawnTimer=.6; roadOffset=0; traffic=[];
-        player.x=LANES[1]; player.targetX=LANES[1]; player.tilt=0;
-        scoreEl.textContent="000000"; speedEl.textContent="230";
-      }
-      state="running"; overlay.classList.add("hidden"); $("pauseBtn").innerHTML="Ⅱ &nbsp; PAUSE";
-      beep(520,.08,"triangle"); setTimeout(()=>beep(760,.1,"triangle"),90);
-    }
-    function pauseGame() {
-      if(state==="running") {
-        state="paused"; showOverlay("RACE PAUSED","TAKE A<br>BREATHER","Your run is paused. Jump back in when you're ready.","RESUME RACE  →","Press P to pause or resume");
-        $("pauseBtn").innerHTML="▶ &nbsp; RESUME";
-      } else if(state==="paused") startGame();
-    }
-    function endGame() {
-      state="gameover"; beep(125,.28,"sawtooth",.055);
-      const final=Math.floor(score);
-      if(final>best){best=final;localStorage.setItem("neonRushBest",String(best));}
-      bestEl.textContent=format(best);
-      showOverlay("RACE OVER","NICE<br>RUN!","Score: "+format(final)+"  •  Best: "+format(best)+". One more run?","RACE AGAIN  →","Tip: small steering moves help you avoid traffic");
-      $("pauseBtn").innerHTML="Ⅱ &nbsp; PAUSE";
-    }
-    function restart() {
-      state="ready"; score=0; elapsed=0; speed=230; traffic=[]; roadOffset=0;
-      scoreEl.textContent="000000";speedEl.textContent="0";
-      showOverlay("READY TO RACE?","NEON<br>RUSH","Dodge traffic, build your speed and chase the high score. Stay sharp — the road gets faster.","START ENGINE  →","PC: ← → or A / D  •  Mobile: use the control pads");
-    }
-    function steer(dir) {
-      if(state!=="running") return;
-      player.targetX=clamp(player.targetX+dir*98,92,328);
-      beep(250+Math.random()*60,.035,"sine",.012);
-    }
-
-    $("startBtn").addEventListener("click",()=>{ if(state==="paused") startGame(); else startGame(); });
-    $("pauseBtn").addEventListener("click",pauseGame);
-    $("restartBtn").addEventListener("click",restart);
-    $("soundBtn").addEventListener("click",()=>{
-      soundOn=!soundOn; $("soundBtn").innerHTML=soundOn?"♫ &nbsp; SOUND ON":"♫ &nbsp; SOUND OFF";
-      if(soundOn) beep(600,.06);
-    });
-    document.addEventListener("keydown",e=>{
-      if(["ArrowLeft","ArrowRight"," "].includes(e.key)) e.preventDefault();
-      if(e.key==="ArrowLeft"||e.key.toLowerCase()==="a") keys.left=true;
-      if(e.key==="ArrowRight"||e.key.toLowerCase()==="d") keys.right=true;
-      if(e.key.toLowerCase()==="p") pauseGame();
-      if(e.key==="Enter" && state!=="running") startGame();
-    });
-    document.addEventListener("keyup",e=>{
-      if(e.key==="ArrowLeft"||e.key.toLowerCase()==="a") keys.left=false;
-      if(e.key==="ArrowRight"||e.key.toLowerCase()==="d") keys.right=false;
-    });
-    function bindPad(id,dir) {
-      const el=$(id);
-      const down=e=>{e.preventDefault();el.classList.add("pressed");keys[dir<0?"left":"right"]=true;};
-      const up=e=>{e.preventDefault();el.classList.remove("pressed");keys[dir<0?"left":"right"]=false;};
-      el.addEventListener("pointerdown",down); el.addEventListener("pointerup",up);
-      el.addEventListener("pointercancel",up); el.addEventListener("pointerleave",up);
-    }
-    bindPad("leftBtn",-1); bindPad("rightBtn",1);
-
-    // Tap the left/right half of the game canvas to steer on touch devices.
-    canvas.addEventListener("pointerdown",e=>{
-      if(e.pointerType==="touch" && state==="running"){
-        const r=canvas.getBoundingClientRect(); steer(e.clientX<r.left+r.width/2?-1:1);
-      }
-    });
-    window.addEventListener("blur",()=>{keys.left=false;keys.right=false;});
-    requestAnimationFrame(render);
-  })();
-  </script>
 </body>
 </html>
