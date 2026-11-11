@@ -1,278 +1,142 @@
-
 <!DOCTYPE html>
 <html lang="my">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MINGALAR - Myanmar Mystery Adventure</title>
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Myanmar:wght@400;600;700&display=swap');
-
-* { box-sizing: border-box; }
-
-body {
-  margin: 0;
-  background: #17101f;
-  color: white;
-  font-family: 'Noto Sans Myanmar', sans-serif;
-}
-
-.container {
-  max-width: 1100px;
-  margin: auto;
-  padding: 20px;
-}
-
-.header {
-  display: flex;
-  justify-content: space-between;
-  color: #ffd36a;
-  font-weight: bold;
-}
-
-.main {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 25px;
-  align-items: center;
-  min-height: 85vh;
-}
-
-.character {
-  height: 650px;
-  overflow: hidden;
-  border-radius: 25px;
-}
-
-.character img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.panel {
-  background: #ffffff12;
-  padding: 28px;
-  border-radius: 25px;
-}
-
-h1 { color: #ffd36a; }
-
-.speech {
-  background: white;
-  color: #321b3b;
-  padding: 20px;
-  border-radius: 20px;
-  line-height: 2;
-  margin: 20px 0;
-}
-
-button {
-  width: 100%;
-  padding: 15px;
-  margin: 7px 0;
-  border: none;
-  border-radius: 15px;
-  font-family: inherit;
-  font-weight: bold;
-  cursor: pointer;
-}
-
-.start { background: #ffbd42; color: #321b3b; }
-.choice { background: #55408d; color: white; }
-.voice { background: #e86ab5; color: white; }
-
-.hidden { display: none; }
-
-@media(max-width:700px) {
-  .main { grid-template-columns: 1fr; }
-  .character { height: 400px; }
-}
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BOX COUNTER</title>
+  <link rel="stylesheet" href="style.css">
 </head>
-
 <body>
-<div class="container">
 
-<header class="header">
-  <div>✦ MINGALAR</div>
-  <div>LEVEL 01 | ⭐ <span id="score">0</span></div>
-</header>
+  <main class="app">
 
-<div class="main">
+    <header class="header">
+      <div class="logo">📦</div>
+      <div>
+        <h1>BOX COUNTER</h1>
+        <p>Smart Loading & Unloading Counter</p>
+      </div>
+    </header>
 
-<div class="character">
-  <img src="assets/mm-girl.jpg" alt="မမလေး">
-</div>
+    <section class="job-card">
+      <h2>အလုပ်အချက်အလက်</h2>
 
-<div class="panel">
+      <label>ကားနံပါတ်</label>
+      <input id="truckNumber" type="text" placeholder="ဥပမာ - 5A / 1234">
 
-<section id="welcome">
-  <h1>မင်္ဂလာပါရှင့် 💗</h1>
+      <label>ရေတွက်သူအမည်</label>
+      <input id="operator" type="text" placeholder="အမည်ထည့်ပါ">
+    </section>
 
-  <div class="speech">
-    <b>မမလေး</b>
-    <p>
-      မင်္ဂလာပါရှင့်။ ကျွန်မနာမည် မမလေးပါ။
-      ဒီနေ့ စိတ်ဝင်စားစရာ လျှို့ဝှက်ချက်လေးတစ်ခု
-      အတူတူရှာကြည့်ကြမလားရှင့်။
-    </p>
-  </div>
+    <section class="mode-section">
+      <h2>လုပ်ဆောင်မှု ရွေးပါ</h2>
 
-  <button class="voice" onclick="speak('မင်္ဂလာပါရှင့်။ ကျွန်မနာမည် မမလေးပါ။')">
-    🔊 အသံနားထောင်မယ်
-  </button>
+      <div class="mode-buttons">
+        <button class="mode-btn active" data-mode="load">
+          ⬆ ပစ္စည်းတင်ခြင်း
+        </button>
 
-  <button class="start" onclick="startGame()">
-    စတင်စူးစမ်းမယ် →
-  </button>
-</section>
+        <button class="mode-btn" data-mode="unload">
+          ⬇ ပစ္စည်းချခြင်း
+        </button>
+      </div>
+    </section>
 
-<section id="game" class="hidden">
-  <h1 id="title">အိမ်ဟောင်းရဲ့ လျှို့ဝှက်ချက်</h1>
+    <section class="counter-card">
+      <p id="counterLabel">စုစုပေါင်း တင်ပြီးသောဖာ</p>
 
-  <div class="speech">
-    <p id="story"></p>
-    <b>မမလေး</b>
-    <p id="dialogue"></p>
-  </div>
+      <div id="count">0</div>
 
-  <div id="choices"></div>
+      <p class="unit">ဖာ / ပုံး</p>
 
-  <p>🔎 တွေ့ရှိထားသော သဲလွန်စ: <span id="clues">0</span></p>
-</section>
+      <div class="counter-buttons">
+        <button id="minusBtn" class="minus">− 1</button>
+        <button id="plusBtn" class="plus">+ 1</button>
+      </div>
 
-<section id="ending" class="hidden">
-  <h1>ဂုဏ်ယူပါတယ်ရှင့်! 🎉</h1>
-  <p>လျှို့ဝှက်ချက်ကို ဖြေရှင်းနိုင်ခဲ့ပါပြီ။</p>
-  <button class="start" onclick="location.reload()">
-    နောက်တစ်ခေါက် ကစားမယ်
-  </button>
-</section>
+      <div class="quick-buttons">
+        <button data-add="5">+5</button>
+        <button data-add="10">+10</button>
+        <button data-add="20">+20</button>
+      </div>
 
-</div>
-</div>
-</div>
+      <button id="undoBtn" class="undo-btn">
+        ↶ နောက်ဆုံးလုပ်ဆောင်ချက် ပြန်ဖျက်ရန်
+      </button>
+    </section>
 
-<script>
-function speak(text) {
-  if (!('speechSynthesis' in window)) {
-    alert('ဒီ Browser မှာ အသံစနစ်မရနိုင်ပါ။');
-    return;
-  }
+    <section class="voice-card">
+      <h2>🎙️ Voice Counter</h2>
+      <p>အသံနဲ့ အရေအတွက် ပြောပြီး ရေတွက်နိုင်ပါတယ်။</p>
 
-  speechSynthesis.cancel();
+      <label>ဘာသာစကား</label>
 
-  const voice = new SpeechSynthesisUtterance(text);
-  voice.lang = 'my-MM';
-  voice.rate = 0.9;
-  voice.pitch = 1.1;
+      <select id="voiceLanguage">
+        <option value="my-MM">မြန်မာဘာသာ</option>
+        <option value="en-US">English</option>
+      </select>
 
-  const voices = speechSynthesis.getVoices();
-  const burmese = voices.find(v =>
-    v.lang.toLowerCase().startsWith('my')
-  );
+      <button id="startVoice" class="voice-start">
+        🎤 အသံဖြင့် ရေတွက်မည်
+      </button>
 
-  if (burmese) voice.voice = burmese;
+      <button id="stopVoice" class="voice-stop" disabled>
+        အသံရပ်မည်
+      </button>
 
-  speechSynthesis.speak(voice);
-}
+      <p id="voiceStatus" class="status">
+        အသံစတင်ရန် ခလုတ်နှိပ်ပါ။
+      </p>
 
-let score = 0;
-let step = 0;
-let clues = 0;
+      <p id="lastSpeech" class="last-speech"></p>
+    </section>
 
-const missions = [
-  {
-    title: 'အိမ်ဟောင်းရဲ့ တံခါး',
-    story: 'ဒီအိမ်ဟောင်းထဲမှာ လျှို့ဝှက်ချက်တစ်ခု ရှိနေတယ်။',
-    dialogue: 'ဘယ်နေရာကို အရင်စစ်ကြည့်မလဲရှင့်။',
-    choices: [
-      ['ပန်းအိုးအောက်ကို ကြည့်မယ်', 'သော့လေးတစ်ချောင်း တွေ့ပြီရှင့်။', true],
-      ['တံခါးကို အတင်းဖွင့်မယ်', 'တံခါးက ဖွင့်မရသေးဘူးရှင့်။', false]
-    ]
-  },
-  {
-    title: 'စာကြည့်ခန်း',
-    story: 'အိမ်ထဲမှာ စာအုပ်တစ်အုပ် တွေ့ရတယ်။',
-    dialogue: 'စာအုပ်ထဲမှာ ဘာရှိမလဲရှင့်။',
-    choices: [
-      ['စာအုပ်ကို ဖတ်မယ်', 'လမင်းပုံရှိတဲ့နေရာမှာ အဖြေရှိတယ်။', true],
-      ['ပြတင်းပေါက်ကို ကြည့်မယ်', 'ဘာမှမတွေ့သေးဘူးရှင့်။', false]
-    ]
-  },
-  {
-    title: 'နောက်ဆုံး ပဟေဠိ',
-    story: 'သေတ္တာတစ်လုံးပေါ်မှာ နံပါတ်သုံးလုံး ထည့်ဖို့နေရာရှိတယ်။',
-    dialogue: 'အဖြေက 2 - 4 - 8 ဖြစ်မယ်ထင်တယ်ရှင့်။',
-    choices: [
-      ['2 - 4 - 8', 'မှန်သွားပြီရှင့်။ သေတ္တာပွင့်သွားပြီ။', true],
-      ['4 - 2 - 8', 'မမှန်သေးဘူးရှင့်။ ထပ်စဉ်းစားပါ။', false]
-    ]
-  }
-];
+    <section class="camera-card">
+      <h2>📷 Camera Counter</h2>
+      <p>ဖုန်း သို့မဟုတ် Laptop Camera ကို ဖွင့်နိုင်ပါတယ်။</p>
 
-function startGame() {
-  document.getElementById('welcome').classList.add('hidden');
-  document.getElementById('game').classList.remove('hidden');
+      <video id="camera" autoplay playsinline muted></video>
 
-  showMission();
-  speak('စလိုက်ကြရအောင်ရှင့်။');
-}
+      <div class="camera-buttons">
+        <button id="startCamera" class="camera-start">
+          Camera ဖွင့်မည်
+        </button>
 
-function showMission() {
-  const m = missions[step];
+        <button id="stopCamera" class="camera-stop" disabled>
+          Camera ပိတ်မည်
+        </button>
+      </div>
 
-  document.getElementById('title').textContent = m.title;
-  document.getElementById('story').textContent = m.story;
-  document.getElementById('dialogue').textContent = m.dialogue;
+      <p id="cameraStatus" class="status">
+        Camera မဖွင့်ရသေးပါ။
+      </p>
 
-  const area = document.getElementById('choices');
-  area.innerHTML = '';
+      <p class="camera-note">
+        လက်ရှိ Version တွင် Camera Preview နှင့် Manual Count ပါဝင်သည်။
+        Camera မှ အလိုအလျောက်ဖာရေတွက်ခြင်းကို AI Model ထည့်သွင်းပြီးမှ
+        အသုံးပြုနိုင်မည်။
+      </p>
+    </section>
 
-  m.choices.forEach(c => {
-    const btn = document.createElement('button');
-    btn.className = 'choice';
-    btn.textContent = c[0];
+    <section class="history-card">
+      <h2>📋 ရေတွက်မှုမှတ်တမ်း</h2>
 
-    btn.onclick = () => selectChoice(c);
+      <div id="history">
+        <p class="empty">မှတ်တမ်းမရှိသေးပါ။</p>
+      </div>
 
-    area.appendChild(btn);
-  });
-}
+      <div class="history-buttons">
+        <button id="exportBtn">⬇ Excel / CSV ထုတ်မည်</button>
+        <button id="resetBtn">Reset</button>
+      </div>
+    </section>
 
-function selectChoice(c) {
-  document.getElementById('dialogue').textContent = c[1];
+    <footer>
+      BOX COUNTER v1.0
+    </footer>
 
-  speak(c[1]);
+  </main>
 
-  if (!c[2]) return;
-
-  clues++;
-  score += 100;
-
-  document.getElementById('score').textContent = score;
-  document.getElementById('clues').textContent = clues;
-
-  setTimeout(() => {
-    step++;
-
-    if (step >= missions.length) {
-      document.getElementById('game').classList.add('hidden');
-      document.getElementById('ending').classList.remove('hidden');
-      speak('ဂုဏ်ယူပါတယ်ရှင့်။ လျှို့ဝှက်ချက်ကို ဖြေရှင်းနိုင်ခဲ့ပြီ။');
-    } else {
-      showMission();
-    }
-  }, 1200);
-}
-
-window.addEventListener('load', () => {
-  setTimeout(() => {
-    speak('မင်္ဂလာပါရှင့်။ ကျွန်မနာမည် လီဆာပါ။');
-  }, 800);
-});
-</script>
-
+  <script src="app.js"></script>
 </body>
 </html>
