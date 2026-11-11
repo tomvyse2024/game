@@ -1,676 +1,801 @@
 
-const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
+import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
+import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/GLTFLoader.js";
 
-const menu = document.getElementById("menu");
-const gameScreen = document.getElementById("gameScreen");
-const overlay = document.getElementById("overlay");
+const scene = new THREE.Scene();
+scene.background = new THREE.Color("#11152c");
+scene.fog = new THREE.Fog("#11152c", 18, 75);
 
-const characters = {
-  akira: { name: "AKIRA", speed: 4.4, jump: -13, color: "#ed4777", hair: "#17101f", scarf: "#ed4777" },
-  volt:  { name: "VOLT", speed: 5.5, jump: -12.5, color: "#35cfff", hair: "#17243d", scarf: "#35cfff" },
-  shade: { name: "SHADE", speed: 4.1, jump: -15, color: "#bd72ff", hair: "#21132f", scarf: "#bd72ff" }
-};
+const camera = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.1, 150);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.7));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+document.getElementById("game").prepend(renderer.domElement);
+
+const clock = new THREE.Clock();
+const loader = new GLTFLoader();
+
+let selectedStage = 0;
+let playing = false;
+let paused = false;
+let health = 100;
+let coins = 0;
+let bossHP = 100;
+let attackCooldown = 0;
+let damageCooldown = 0;
+let jumpVelocity = 0;
+let grounded = true;
+let attackAnimation = 0;
+let messageTimer = 0;
+let mixer = null;
+let loadedModel = null;
+
+const input = { forward: 0, side: 0, attack: false, jump: false };
+let cameraYaw = 0;
+let cameraPitch = 0.25;
 
 const stages = [
-  { name: "MOONLIT FOREST", sky: "#101b39", ground: "#243b36", boss: "#9c315f", bossName: "FOREST DEMON", unlock: 0 },
-  { name: "FROZEN TEMPLE", sky: "#122d4c", ground: "#547e9a", boss: "#55bce9", bossName: "ICE MONSTER", unlock: 1 },
-  { name: "LAVA FORTRESS", sky: "#421b25", ground: "#6b3025", boss: "#ff663b", bossName: "LAVA KING", unlock: 2 }
+  {
+    name: "MOONLIT FOREST",
+    sky: "#111a39",
+    ground: "#263d35",
+    fog: "#111a39",
+    boss: "#a43c69",
+    bossName: "FOREST DEMON",
+    light: 0x9daaff
+  },
+  {
+    name: "FROZEN TEMPLE",
+    sky: "#193650",
+    ground: "#7898a9",
+    fog: "#193650",
+    boss: "#52bce8",
+    bossName: "ICE MONSTER",
+    light: 0xbbeaff
+  },
+  {
+    name: "LAVA FORTRESS",
+    sky: "#411c25",
+    ground: "#673126",
+    fog: "#411c25",
+    boss: "#f05c38",
+    bossName: "LAVA KING",
+    light: 0xffa36c
+  }
 ];
 
-let selectedCharacter = "akira";
-let selectedStage = 0;
-let save = JSON.parse(localStorage.getItem("shadowNinjaV3") || '{"coins":0,"best":0,"unlocked":0,"cleared":[]}');
+const mat = (color, roughness = 0.7, metalness = 0) =>
+  new THREE.MeshStandardMaterial({ color, roughness, metalness });
 
-let player, boss, coins, projectiles, score;
-let keys = {};
-let gameRunning = false;
-let paused = false;
-let lastTime = 0;
-let animationId = 0;
-let attackCooldown = 0;
-let invincible = 0;
-let jumpRequested = false;
-let attackRequested = false;
-let audioCtx;
-
-function saveGame() {
-  localStorage.setItem("shadowNinjaV3", JSON.stringify(save));
-  updateMenu();
-}
-
-function updateMenu() {
-  document.getElementById("menuCoins").textContent = save.coins;
-  document.getElementById("menuBest").textContent = save.best;
-
-  document.querySelectorAll(".stage").forEach((button, index) => {
-    const unlocked = index <= save.unlocked;
-    button.classList.toggle("locked", !unlocked);
-    button.classList.toggle("selected", index === selectedStage);
-    button.querySelector("small").textContent = unlocked
-      ? `Stage ${index + 1} · Available`
-      : `Stage ${index + 1} · Locked`;
-  });
-}
-
-document.querySelectorAll(".character").forEach(button => {
-  button.addEventListener("click", () => {
-    selectedCharacter = button.dataset.character;
-    document.querySelectorAll(".character").forEach(b => b.classList.remove("selected"));
-    button.classList.add("selected");
-    sound(450);
-  });
-});
-
-document.querySelectorAll(".stage").forEach(button => {
-  button.addEventListener("click", () => {
-    const index = Number(button.dataset.stage);
-    if (index > save.unlocked) return;
-
-    selectedStage = index;
-    document.querySelectorAll(".stage").forEach(b => b.classList.remove("selected"));
-    button.classList.add("selected");
-    sound(500);
-  });
-});
-
-document.getElementById("startBtn").onclick = startGame;
-document.getElementById("menuBtn").onclick = goHome;
-document.getElementById("pauseBtn").onclick = pauseGame;
-document.getElementById("resumeBtn").onclick = resumeGame;
-document.getElementById("retryBtn").onclick = startGame;
-document.getElementById("homeBtn").onclick = goHome;
-document.getElementById("nextBtn").onclick = () => {
-  selectedStage = Math.min(2, selectedStage + 1);
-  startGame();
+const materials = {
+  black: mat("#191522"),
+  dark: mat("#292033"),
+  red: mat("#c93261"),
+  skin: mat("#e6ae9d"),
+  hair: mat("#17101f", 0.45),
+  gold: mat("#d9ad5d", 0.35, 0.6),
+  white: mat("#f2eafa")
 };
 
-function sound(freq = 400) {
-  try {
-    audioCtx ??= new (window.AudioContext || window.webkitAudioContext)();
-    if (audioCtx.state === "suspended") audioCtx.resume();
-
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-    osc.frequency.value = freq;
-    osc.type = "sine";
-    gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
-    osc.start();
-    osc.stop(audioCtx.currentTime + 0.15);
-  } catch (e) {}
+function box(parent, size, material, position, cast = true) {
+  const mesh = new THREE.Mesh(
+    new THREE.BoxGeometry(...size),
+    material
+  );
+  mesh.position.set(...position);
+  mesh.castShadow = cast;
+  mesh.receiveShadow = true;
+  parent.add(mesh);
+  return mesh;
 }
 
-function startGame() {
-  cancelAnimationFrame(animationId);
-
-  player = {
-    x: 75, y: 390, w: 38, h: 70,
-    vx: 0, vy: 0, health: 3,
-    grounded: false,
-    facing: 1,
-    frame: 0
-  };
-
-  boss = {
-    x: 790, y: 360, w: 95, h: 100,
-    health: 100, maxHealth: 100,
-    direction: -1,
-    attackTimer: 0
-  };
-
-  coins = [
-    { x: 220, y: 390, taken: false },
-    { x: 340, y: 330, taken: false },
-    { x: 470, y: 390, taken: false },
-    { x: 590, y: 310, taken: false },
-    { x: 690, y: 390, taken: false }
-  ];
-
-  projectiles = [];
-  score = 0;
-  attackCooldown = 0;
-  invincible = 0;
-  keys = {};
-  jumpRequested = false;
-  attackRequested = false;
-  paused = false;
-  gameRunning = true;
-
-  menu.classList.add("hidden");
-  gameScreen.classList.remove("hidden");
-  overlay.classList.add("hidden");
-
-  document.getElementById("stageName").textContent = stages[selectedStage].name;
-  updateHUD();
-
-  lastTime = performance.now();
-  animationId = requestAnimationFrame(loop);
+function sphere(parent, radius, material, position, scale = [1, 1, 1]) {
+  const mesh = new THREE.Mesh(
+    new THREE.SphereGeometry(radius, 20, 16),
+    material
+  );
+  mesh.position.set(...position);
+  mesh.scale.set(...scale);
+  mesh.castShadow = true;
+  parent.add(mesh);
+  return mesh;
 }
 
-function updateHUD() {
-  document.getElementById("health").textContent = player.health;
-  document.getElementById("coins").textContent = save.coins;
-  document.getElementById("score").textContent = score;
+function cylinder(parent, top, bottom, height, material, position) {
+  const mesh = new THREE.Mesh(
+    new THREE.CylinderGeometry(top, bottom, height, 12),
+    material
+  );
+  mesh.position.set(...position);
+  mesh.castShadow = true;
+  parent.add(mesh);
+  return mesh;
 }
 
-function loop(time) {
-  if (!gameRunning) return;
+// Lighting
+const ambient = new THREE.HemisphereLight(0xbac8ff, 0x30202c, 1.5);
+scene.add(ambient);
 
-  const dt = Math.min((time - lastTime) / 16.67, 2);
-  lastTime = time;
+const moonLight = new THREE.DirectionalLight(0xd5d8ff, 3);
+moonLight.position.set(-8, 15, 8);
+moonLight.castShadow = true;
+moonLight.shadow.mapSize.set(1024, 1024);
+scene.add(moonLight);
 
-  if (!paused) {
-    update(dt);
-    draw();
+const rimLight = new THREE.PointLight(0xd34b91, 35, 25);
+rimLight.position.set(3, 5, -4);
+scene.add(rimLight);
+
+// Ground
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(100, 100),
+  mat("#263d35")
+);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// Decorative environment
+const environment = new THREE.Group();
+scene.add(environment);
+
+function makeTree(x, z, scale = 1) {
+  const tree = new THREE.Group();
+  tree.position.set(x, 0, z);
+  tree.scale.setScalar(scale);
+
+  cylinder(tree, 0.35, 0.5, 4, mat("#34272b"), [0, 2, 0]);
+
+  for (let i = 0; i < 3; i++) {
+    const crown = sphere(
+      tree,
+      1.3 - i * 0.12,
+      mat(i % 2 ? "#233b3a" : "#304a43"),
+      [0, 3.1 + i * 0.7, 0],
+      [1, 0.8, 1]
+    );
   }
 
-  animationId = requestAnimationFrame(loop);
+  environment.add(tree);
 }
 
-function update(dt) {
-  const character = characters[selectedCharacter];
+function buildEnvironment() {
+  environment.clear();
 
-  player.vx = 0;
-  if (keys.left) {
-    player.vx = -character.speed;
-    player.facing = -1;
-  }
-  if (keys.right) {
-    player.vx = character.speed;
-    player.facing = 1;
-  }
-
-  player.x += player.vx * dt;
-  player.x = Math.max(0, Math.min(900 - player.w, player.x));
-
-  player.vy += 0.65 * dt;
-  player.y += player.vy * dt;
-
-  if (player.y + player.h >= 460) {
-    player.y = 460 - player.h;
-    player.vy = 0;
-    player.grounded = true;
-  } else {
-    player.grounded = false;
+  for (let i = 0; i < 22; i++) {
+    const side = i % 2 === 0 ? -1 : 1;
+    makeTree(
+      side * (7 + Math.random() * 15),
+      -20 + Math.random() * 45,
+      0.7 + Math.random() * 0.8
+    );
   }
 
-  if (jumpRequested && player.grounded) {
-    player.vy = character.jump;
-    player.grounded = false;
-    sound(600);
-  }
-  jumpRequested = false;
-
-  attackCooldown -= dt;
-  invincible -= dt;
-
-  if (attackRequested && attackCooldown <= 0) {
-    projectiles.push({
-      x: player.x + (player.facing > 0 ? 35 : -5),
-      y: player.y + 30,
-      vx: player.facing * 10,
-      life: 90
-    });
-    attackCooldown = 22;
-    sound(750);
-  }
-  attackRequested = false;
-
-  coins.forEach(coin => {
-    if (!coin.taken &&
-      Math.abs(player.x + 19 - coin.x) < 30 &&
-      Math.abs(player.y + 35 - coin.y) < 38) {
-      coin.taken = true;
-      save.coins++;
-      score += 100;
-      sound(900);
-      saveGame();
-    }
-  });
-
-  projectiles.forEach(p => {
-    p.x += p.vx * dt;
-    p.life -= dt;
-
-    if (
-      p.life > 0 &&
-      p.x > boss.x - 20 &&
-      p.x < boss.x + boss.w + 20 &&
-      p.y > boss.y &&
-      p.y < boss.y + boss.h
-    ) {
-      p.life = 0;
-      boss.health -= 12;
-      score += 25;
-      sound(250);
-    }
-  });
-
-  projectiles = projectiles.filter(p => p.life > 0);
-
-  // Boss movement and contact damage
-  boss.attackTimer += dt;
-  boss.x += boss.direction * 1.15 * dt;
-
-  if (boss.x < 600 || boss.x > 820) boss.direction *= -1;
-
-  if (boss.attackTimer > 85) {
-    boss.attackTimer = 0;
-    if (Math.abs(player.x - boss.x) < 330) {
-      projectiles.push({
-        x: boss.x,
-        y: boss.y + 40,
-        vx: player.x < boss.x ? -5 : 5,
-        life: 100,
-        enemy: true
-      });
-    }
-  }
-
-  projectiles.forEach(p => {
-    if (p.enemy &&
-      p.x > player.x &&
-      p.x < player.x + player.w &&
-      p.y > player.y &&
-      p.y < player.y + player.h) {
-      p.life = 0;
-      damagePlayer();
-    }
-  });
-
-  if (
-    player.x + player.w > boss.x &&
-    player.x < boss.x + boss.w &&
-    player.y + player.h > boss.y &&
-    player.y < boss.y + boss.h
-  ) {
-    damagePlayer();
-  }
-
-  if (boss.health <= 0) winGame();
-  if (player.health <= 0) loseGame();
-
-  updateHUD();
-}
-
-function damagePlayer() {
-  if (invincible > 0) return;
-  player.health--;
-  invincible = 75;
-  player.vy = -5;
-  sound(130);
-}
-
-function draw() {
-  const stage = stages[selectedStage];
-
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  // Sky
-  const gradient = ctx.createLinearGradient(0, 0, 0, 540);
-  gradient.addColorStop(0, stage.sky);
-  gradient.addColorStop(1, "#171326");
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, 960, 540);
-
-  // Moon
-  ctx.fillStyle = "#f4e8ff";
-  ctx.beginPath();
-  ctx.arc(770, 95, 42, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Distant mountains
-  ctx.fillStyle = "#292746";
-  ctx.beginPath();
-  ctx.moveTo(0, 380);
-  for (let x = 0; x <= 960; x += 120) {
-    ctx.lineTo(x + 60, 245 + Math.sin(x) * 20);
-    ctx.lineTo(x + 120, 380);
-  }
-  ctx.fill();
-
-  // Trees / background
-  for (let i = 0; i < 9; i++) {
-    const x = i * 120;
-    ctx.fillStyle = "#172c2b";
-    ctx.fillRect(x + 35, 260, 16, 200);
-    ctx.beginPath();
-    ctx.moveTo(x + 43, 160);
-    ctx.lineTo(x - 15, 300);
-    ctx.lineTo(x + 100, 300);
-    ctx.fill();
-  }
-
-  // Ground
-  ctx.fillStyle = stage.ground;
-  ctx.fillRect(0, 460, 960, 80);
-
-  ctx.fillStyle = "#ffffff22";
-  for (let i = 0; i < 960; i += 45) {
-    ctx.fillRect(i, 468, 20, 3);
-  }
-
-  // Coins
-  coins.forEach(coin => {
-    if (coin.taken) return;
-    ctx.fillStyle = "#ffd44f";
-    ctx.beginPath();
-    ctx.arc(coin.x, coin.y, 10, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = "#fff3a5";
-    ctx.lineWidth = 3;
-    ctx.stroke();
-  });
-
-  drawBoss();
-  drawNinja();
-
-  // Shuriken
-  projectiles.forEach(p => {
-    ctx.save();
-    ctx.translate(p.x, p.y);
-    ctx.fillStyle = p.enemy ? "#ff634f" : "#e9eaff";
-    ctx.rotate(performance.now() / 60);
-    ctx.beginPath();
-    for (let i = 0; i < 8; i++) {
-      const r = i % 2 === 0 ? 13 : 4;
-      ctx.lineTo(Math.cos(i * Math.PI / 4) * r, Math.sin(i * Math.PI / 4) * r);
-    }
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-  });
-
-  // Boss health bar
-  ctx.fillStyle = "#241728";
-  ctx.fillRect(335, 18, 290, 18);
-  ctx.fillStyle = stage.boss;
-  ctx.fillRect(335, 18, 290 * Math.max(0, boss.health / boss.maxHealth), 18);
-  ctx.strokeStyle = "#ffffff";
-  ctx.strokeRect(335, 18, 290, 18);
-
-  ctx.fillStyle = "#fff";
-  ctx.font = "bold 13px Arial";
-  ctx.textAlign = "center";
-  ctx.fillText(stage.bossName, 480, 13);
-}
-
-function drawNinja() {
-  const c = characters[selectedCharacter];
-  const x = player.x;
-  const y = player.y;
-  const facing = player.facing;
-
-  ctx.save();
-  ctx.translate(x + player.w / 2, y);
-  ctx.scale(facing, 1);
-
-  if (invincible > 0 && Math.floor(invincible / 6) % 2 === 0) {
-    ctx.globalAlpha = 0.4;
-  }
-
-  // Long flowing ponytail
-  ctx.fillStyle = c.hair;
-  ctx.beginPath();
-  ctx.moveTo(-4, 12);
-  ctx.quadraticCurveTo(-30, 0, -37, 32);
-  ctx.quadraticCurveTo(-17, 23, -8, 37);
-  ctx.fill();
-
-  // Legs
-  ctx.strokeStyle = "#191523";
-  ctx.lineWidth = 11;
-  ctx.lineCap = "round";
-  ctx.beginPath();
-  ctx.moveTo(-7, 49);
-  ctx.lineTo(-13, 67);
-  ctx.moveTo(7, 49);
-  ctx.lineTo(14, 67);
-  ctx.stroke();
-
-  // Boots
-  ctx.strokeStyle = c.color;
-  ctx.lineWidth = 9;
-  ctx.beginPath();
-  ctx.moveTo(-13, 67);
-  ctx.lineTo(-21, 68);
-  ctx.moveTo(14, 67);
-  ctx.lineTo(23, 68);
-  ctx.stroke();
-
-  // Body / fitted ninja suit
-  ctx.fillStyle = "#21182b";
-  ctx.beginPath();
-  ctx.moveTo(-13, 18);
-  ctx.lineTo(13, 18);
-  ctx.lineTo(17, 49);
-  ctx.lineTo(-17, 49);
-  ctx.closePath();
-  ctx.fill();
-
-  // Suit details
-  ctx.strokeStyle = c.color;
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(-10, 24);
-  ctx.lineTo(10, 44);
-  ctx.moveTo(10, 24);
-  ctx.lineTo(-10, 44);
-  ctx.stroke();
-
-  // Belt
-  ctx.fillStyle = c.color;
-  ctx.fillRect(-15, 43, 30, 5);
-
-  // Arms
-  ctx.strokeStyle = "#d99a9a";
-  ctx.lineWidth = 8;
-  ctx.beginPath();
-  ctx.moveTo(-12, 23);
-  ctx.lineTo(-23, 39);
-  ctx.moveTo(12, 23);
-  ctx.lineTo(22, 34);
-  ctx.stroke();
-
-  // Gloves
-  ctx.strokeStyle = "#21182b";
-  ctx.lineWidth = 8;
-  ctx.beginPath();
-  ctx.moveTo(-23, 39);
-  ctx.lineTo(-28, 43);
-  ctx.moveTo(22, 34);
-  ctx.lineTo(29, 34);
-  ctx.stroke();
-
-  // Neck
-  ctx.fillStyle = "#d99a9a";
-  ctx.fillRect(-5, 12, 10, 10);
-
-  // Face
-  ctx.fillStyle = "#f0b8a7";
-  ctx.beginPath();
-  ctx.ellipse(0, 9, 13, 15, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Long hair
-  ctx.fillStyle = c.hair;
-  ctx.beginPath();
-  ctx.arc(0, 4, 14, Math.PI, Math.PI * 2);
-  ctx.lineTo(13, 12);
-  ctx.quadraticCurveTo(4, 1, -12, 12);
-  ctx.closePath();
-  ctx.fill();
-
-  // Eyes
-  ctx.fillStyle = "#302039";
-  ctx.fillRect(3, 8, 3, 2);
-
-  // Ninja headband
-  ctx.fillStyle = c.color;
-  ctx.fillRect(-13, 2, 26, 4);
-  ctx.beginPath();
-  ctx.moveTo(11, 4);
-  ctx.lineTo(25, 11);
-  ctx.lineTo(13, 9);
-  ctx.fill();
-
-  // Scarf tail
-  ctx.fillStyle = c.scarf;
-  ctx.beginPath();
-  ctx.moveTo(-7, 20);
-  ctx.quadraticCurveTo(-27, 13, -35, 25);
-  ctx.lineTo(-17, 29);
-  ctx.lineTo(-8, 25);
-  ctx.fill();
-
-  ctx.restore();
-}
-
-function drawBoss() {
-  const stage = stages[selectedStage];
-
-  ctx.fillStyle = stage.boss;
-  ctx.beginPath();
-  ctx.roundRect(boss.x, boss.y, boss.w, boss.h, 18);
-  ctx.fill();
-
-  // Horns
-  ctx.fillStyle = "#eee1f2";
-  ctx.beginPath();
-  ctx.moveTo(boss.x + 20, boss.y + 12);
-  ctx.lineTo(boss.x + 5, boss.y - 18);
-  ctx.lineTo(boss.x + 35, boss.y + 5);
-  ctx.fill();
-
-  ctx.beginPath();
-  ctx.moveTo(boss.x + 72, boss.y + 12);
-  ctx.lineTo(boss.x + 90, boss.y - 18);
-  ctx.lineTo(boss.x + 60, boss.y + 5);
-  ctx.fill();
-
-  // Eyes
-  ctx.fillStyle = "#fff";
-  ctx.fillRect(boss.x + 20, boss.y + 30, 17, 8);
-  ctx.fillRect(boss.x + 58, boss.y + 30, 17, 8);
-  ctx.fillStyle = "#ff2424";
-  ctx.fillRect(boss.x + 26, boss.y + 31, 7, 6);
-  ctx.fillRect(boss.x + 64, boss.y + 31, 7, 6);
-
-  ctx.fillStyle = "#1a101e";
-  ctx.fillRect(boss.x + 30, boss.y + 70, 35, 7);
-}
-
-function showResult(title, message, showNext = false) {
-  gameRunning = false;
-  cancelAnimationFrame(animationId);
-
-  document.getElementById("resultTitle").textContent = title;
-  document.getElementById("resultText").textContent = message;
-
-  document.getElementById("resumeBtn").classList.toggle("hidden", title !== "PAUSED");
-  document.getElementById("nextBtn").classList.toggle("hidden", !showNext);
-  overlay.classList.remove("hidden");
-}
-
-function winGame() {
-  score += 500;
-  save.best = Math.max(save.best, score);
-
-  if (!save.cleared.includes(selectedStage)) {
-    save.cleared.push(selectedStage);
-  }
-
-  if (selectedStage < 2) {
-    save.unlocked = Math.max(save.unlocked, selectedStage + 1);
-  }
-
-  saveGame();
-  updateHUD();
-
-  showResult(
-    "VICTORY!",
-    `${characters[selectedCharacter].name} defeated ${stages[selectedStage].bossName}! Score: ${score}`,
-    selectedStage < 2
+  const moon = sphere(
+    environment, 2.4, mat("#f0e9ff", 1),
+    [-14, 13, -25]
   );
 
-  sound(1000);
+  const glow = new THREE.PointLight(0xc7caff, 25, 40);
+  glow.position.set(-14, 13, -23);
+  environment.add(glow);
+
+  // Floating atmospheric particles
+  const particleGeometry = new THREE.BufferGeometry();
+  const positions = [];
+
+  for (let i = 0; i < 150; i++) {
+    positions.push(
+      (Math.random() - 0.5) * 45,
+      Math.random() * 10,
+      (Math.random() - 0.5) * 50
+    );
+  }
+
+  particleGeometry.setAttribute(
+    "position",
+    new THREE.Float32BufferAttribute(positions, 3)
+  );
+
+  const particles = new THREE.Points(
+    particleGeometry,
+    new THREE.PointsMaterial({
+      color: 0xf7b6db,
+      size: 0.08,
+      transparent: true,
+      opacity: 0.8
+    })
+  );
+
+  environment.add(particles);
 }
 
-function loseGame() {
-  save.best = Math.max(save.best, score);
-  saveGame();
-  showResult("GAME OVER", "The shadow world is waiting. Try again!");
+// Character rig
+const player = new THREE.Group();
+scene.add(player);
+
+const rig = new THREE.Group();
+player.add(rig);
+
+const leftArm = new THREE.Group();
+const rightArm = new THREE.Group();
+const leftLeg = new THREE.Group();
+const rightLeg = new THREE.Group();
+
+function makeLimb(parent, length, material, radius = 0.13) {
+  const mesh = new THREE.Mesh(
+    new THREE.CapsuleGeometry(radius, length, 4, 8),
+    material
+  );
+  mesh.position.y = -length / 2;
+  mesh.castShadow = true;
+  parent.add(mesh);
+  return mesh;
 }
 
+function buildNinja() {
+  rig.clear();
+
+  // Legs
+  leftLeg.position.set(-0.19, 0.9, 0);
+  rightLeg.position.set(0.19, 0.9, 0);
+  rig.add(leftLeg, rightLeg);
+
+  makeLimb(leftLeg, 0.75, materials.black, 0.14);
+  makeLimb(rightLeg, 0.75, materials.black, 0.14);
+
+  // Boots
+  box(leftLeg, [0.32, 0.16, 0.48], materials.red, [0, -0.78, 0.08]);
+  box(rightLeg, [0.32, 0.16, 0.48], materials.red, [0, -0.78, 0.08]);
+
+  // Body
+  const torso = new THREE.Mesh(
+    new THREE.CapsuleGeometry(0.31, 0.6, 5, 12),
+    materials.dark
+  );
+  torso.position.y = 1.48;
+  torso.castShadow = true;
+  rig.add(torso);
+
+  // Suit details
+  box(rig, [0.48, 0.12, 0.48], materials.red, [0, 1.15, 0]);
+  box(rig, [0.12, 0.65, 0.04], materials.gold, [0, 1.45, 0.29]);
+
+  // Neck and head
+  cylinder(rig, 0.11, 0.13, 0.2, materials.skin, [0, 1.91, 0]);
+  sphere(rig, 0.29, materials.skin, [0, 2.22, 0], [0.84, 1.05, 0.86]);
+
+  // Hair cap and long hair
+  sphere(rig, 0.3, materials.hair, [0, 2.36, -0.06], [1.02, 0.75, 1.0]);
+
+  const ponytail = sphere(
+    rig, 0.18, materials.hair,
+    [0, 2.18, -0.4],
+    [0.75, 2.8, 0.75]
+  );
+
+  ponytail.rotation.x = -0.3;
+
+  // Side hair
+  sphere(rig, 0.13, materials.hair, [-0.25, 2.08, 0.02], [0.6, 1.7, 0.7]);
+  sphere(rig, 0.13, materials.hair, [0.25, 2.08, 0.02], [0.6, 1.7, 0.7]);
+
+  // Eyes and headband
+  box(rig, [0.42, 0.055, 0.05], materials.red, [0, 2.3, 0.245]);
+  sphere(rig, 0.035, materials.dark, [-0.1, 2.23, 0.25]);
+  sphere(rig, 0.035, materials.dark, [0.1, 2.23, 0.25]);
+
+  // Scarf
+  const scarf = box(rig, [0.18, 0.1, 0.7], materials.red, [-0.2, 1.72, -0.42]);
+  scarf.rotation.x = -0.3;
+
+  // Arms
+  leftArm.position.set(-0.38, 1.72, 0);
+  rightArm.position.set(0.38, 1.72, 0);
+  rig.add(leftArm, rightArm);
+
+  makeLimb(leftArm, 0.65, materials.black, 0.12);
+  makeLimb(rightArm, 0.65, materials.black, 0.12);
+
+  sphere(leftArm, 0.12, materials.skin, [0, -0.7, 0]);
+  sphere(rightArm, 0.12, materials.skin, [0, -0.7, 0]);
+
+  // Katana
+  const sword = new THREE.Group();
+  sword.position.set(0, -0.72, 0.12);
+  rightArm.add(sword);
+
+  cylinder(sword, 0.035, 0.035, 0.55, materials.gold, [0, -0.28, 0]);
+  const blade = new THREE.Mesh(
+    new THREE.BoxGeometry(0.055, 1.2, 0.035),
+    mat("#dbe9ff", 0.2, 0.8)
+  );
+  blade.position.y = -1.05;
+  sword.add(blade);
+
+  player.userData.sword = sword;
+  player.userData.ponytail = ponytail;
+}
+
+buildNinja();
+
+// Optional replacement with a proper animated GLB character model.
+// Example: loadNinjaModel("./assets/akira.glb")
+window.loadNinjaModel = async function(url) {
+  try {
+    const gltf = await loader.loadAsync(url);
+
+    if (loadedModel) player.remove(loadedModel);
+
+    loadedModel = gltf.scene;
+    loadedModel.scale.setScalar(1.5);
+    loadedModel.position.set(0, 0, 0);
+
+    player.add(loadedModel);
+    rig.visible = false;
+
+    if (mixer) mixer.stopAllAction();
+    mixer = new THREE.AnimationMixer(loadedModel);
+
+    if (gltf.animations.length) {
+      mixer.clipAction(gltf.animations[0]).play();
+    }
+
+    console.log("3D Ninja model loaded.");
+  } catch (error) {
+    console.error("Could not load the GLB model:", error);
+  }
+};
+
+// Boss
+const boss = new THREE.Group();
+scene.add(boss);
+
+const bossBody = new THREE.Mesh(
+  new THREE.CapsuleGeometry(0.65, 1.15, 5, 12),
+  mat("#a43c69", 0.45)
+);
+bossBody.position.y = 1.3;
+bossBody.castShadow = true;
+boss.add(bossBody);
+
+sphere(boss, 0.48, mat("#4a263f"), [0, 2.2, 0], [1, 1.1, 0.9]);
+sphere(boss, 0.08, mat("#ff302e", 0.2, 0.2), [-0.19, 2.25, 0.4]);
+sphere(boss, 0.08, mat("#ff302e", 0.2, 0.2), [0.19, 2.25, 0.4]);
+
+// Boss horns
+const hornMat = mat("#eee2e9");
+const horn1 = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.65, 8), hornMat);
+horn1.position.set(-0.35, 2.8, 0);
+horn1.rotation.z = 0.35;
+boss.add(horn1);
+
+const horn2 = horn1.clone();
+horn2.position.x = 0.35;
+horn2.rotation.z = -0.35;
+boss.add(horn2);
+
+// Coin objects
+const coinObjects = [];
+
+function makeCoins() {
+  coinObjects.forEach(c => scene.remove(c));
+  coinObjects.length = 0;
+
+  for (let i = 0; i < 9; i++) {
+    const coin = new THREE.Mesh(
+      new THREE.TorusGeometry(0.22, 0.07, 8, 18),
+      mat("#ffd65b", 0.25, 0.7)
+    );
+
+    coin.position.set(
+      -7 + i * 1.8,
+      1.1 + (i % 2) * 0.5,
+      -4 - (i % 3) * 2
+    );
+
+    coin.userData.collected = false;
+    scene.add(coin);
+    coinObjects.push(coin);
+  }
+}
+
+// Stage setup
+function setupStage() {
+  const s = stages[selectedStage];
+
+  scene.background = new THREE.Color(s.sky);
+  scene.fog.color.set(s.fog);
+  ground.material.color.set(s.ground);
+  bossBody.material.color.set(s.boss);
+  rimLight.color.set(s.light);
+
+  document.getElementById("stageName").textContent = s.name;
+  document.getElementById("bossName").textContent = s.bossName;
+
+  buildEnvironment();
+  makeCoins();
+
+  player.position.set(0, 0, 5);
+  player.rotation.y = Math.PI;
+
+  boss.position.set(0, 0, -9);
+  bossHP = 100;
+  health = 100;
+  coins = 0;
+
+  updateHUD();
+}
+
+// HUD
+function updateHUD() {
+  document.getElementById("health").textContent = health;
+  document.getElementById("coins").textContent = coins;
+  document.getElementById("bossHealth").style.width = bossHP + "%";
+}
+
+function showMessage(text) {
+  const el = document.getElementById("message");
+  el.textContent = text;
+  messageTimer = 1.5;
+}
+
+// Start game
+function startGame() {
+  document.getElementById("menu").classList.add("hidden");
+  document.getElementById("pausePanel").classList.add("hidden");
+  document.getElementById("resultPanel").classList.add("hidden");
+  document.getElementById("hud").classList.remove("hidden");
+
+  if (innerWidth < 850 || "ontouchstart" in window) {
+    document.getElementById("mobileControls").classList.remove("hidden");
+  }
+
+  document.getElementById("help").style.display = "none";
+
+  setupStage();
+  playing = true;
+  paused = false;
+  clock.start();
+  showMessage("DEFEAT THE BOSS!");
+}
+
+document.getElementById("start").onclick = startGame;
+
+// Stage selection
+document.querySelectorAll(".stage").forEach(button => {
+  button.onclick = () => {
+    selectedStage = Number(button.dataset.stage);
+    document.querySelectorAll(".stage").forEach(b => b.classList.remove("active"));
+    button.classList.add("active");
+  };
+});
+
+// Pause and result screens
 function pauseGame() {
-  if (!gameRunning) return;
+  if (!playing) return;
   paused = true;
-  showResult("PAUSED", "Your adventure is waiting.");
+  document.getElementById("pausePanel").classList.remove("hidden");
 }
 
 function resumeGame() {
   paused = false;
-  gameRunning = true;
-  overlay.classList.add("hidden");
-  lastTime = performance.now();
+  document.getElementById("pausePanel").classList.add("hidden");
+  clock.getDelta();
 }
+
+function endGame(victory) {
+  playing = false;
+
+  document.getElementById("resultPanel").classList.remove("hidden");
+  document.getElementById("resultTitle").textContent =
+    victory ? "VICTORY!" : "GAME OVER";
+
+  document.getElementById("resultText").textContent =
+    victory
+      ? "The shadow world is safe... for now."
+      : "The darkness has won this time. Try again.";
+}
+
+document.getElementById("pause").onclick = pauseGame;
+document.getElementById("resume").onclick = resumeGame;
+document.getElementById("retry").onclick = startGame;
 
 function goHome() {
-  gameRunning = false;
+  playing = false;
   paused = false;
-  cancelAnimationFrame(animationId);
-  overlay.classList.add("hidden");
-  gameScreen.classList.add("hidden");
-  menu.classList.remove("hidden");
-  updateMenu();
+
+  document.getElementById("menu").classList.remove("hidden");
+  document.getElementById("hud").classList.add("hidden");
+  document.getElementById("mobileControls").classList.add("hidden");
+  document.getElementById("pausePanel").classList.add("hidden");
+  document.getElementById("resultPanel").classList.add("hidden");
 }
 
-// Keyboard controls
-window.addEventListener("keydown", e => {
-  if (["ArrowLeft", "ArrowRight", "ArrowUp", "Space"].includes(e.code)) {
-    e.preventDefault();
-  }
+document.getElementById("home").onclick = goHome;
+document.getElementById("resultHome").onclick = goHome;
 
-  if (e.code === "ArrowLeft" || e.code === "KeyA") keys.left = true;
-  if (e.code === "ArrowRight" || e.code === "KeyD") keys.right = true;
-  if (e.code === "ArrowUp" || e.code === "Space" || e.code === "KeyW") jumpRequested = true;
-  if (e.code === "KeyJ" || e.code === "KeyK") attackRequested = true;
+// Keyboard
+window.addEventListener("keydown", e => {
+  if (e.code === "KeyW" || e.code === "ArrowUp") input.forward = 1;
+  if (e.code === "KeyS" || e.code === "ArrowDown") input.forward = -1;
+  if (e.code === "KeyA" || e.code === "ArrowLeft") input.side = -1;
+  if (e.code === "KeyD" || e.code === "ArrowRight") input.side = 1;
+  if (e.code === "Space") input.jump = true;
+  if (e.code === "KeyJ" || e.code === "KeyK") input.attack = true;
+  if (e.code === "Escape") pauseGame();
 });
 
 window.addEventListener("keyup", e => {
-  if (e.code === "ArrowLeft" || e.code === "KeyA") keys.left = false;
-  if (e.code === "ArrowRight" || e.code === "KeyD") keys.right = false;
+  if (["KeyW", "ArrowUp", "KeyS", "ArrowDown"].includes(e.code)) input.forward = 0;
+  if (["KeyA", "ArrowLeft", "KeyD", "ArrowRight"].includes(e.code)) input.side = 0;
+  if (e.code === "Space") input.jump = false;
+  if (e.code === "KeyJ" || e.code === "KeyK") input.attack = false;
 });
 
-// Mobile buttons: hold to move
-function holdButton(id, key) {
-  const button = document.getElementById(id);
+// Touch joystick
+const joystick = document.getElementById("joystick");
+const stick = document.getElementById("stick");
+let joyPointer = null;
 
-  button.addEventListener("pointerdown", e => {
-    e.preventDefault();
-    keys[key] = true;
-    button.setPointerCapture(e.pointerId);
-  });
+joystick.addEventListener("pointerdown", e => {
+  joyPointer = e.pointerId;
+  joystick.setPointerCapture(joyPointer);
+  moveStick(e);
+});
 
-  ["pointerup", "pointercancel", "lostpointercapture"].forEach(event => {
-    button.addEventListener(event, () => keys[key] = false);
-  });
+joystick.addEventListener("pointermove", e => {
+  if (e.pointerId === joyPointer) moveStick(e);
+});
+
+function moveStick(e) {
+  const rect = joystick.getBoundingClientRect();
+  const dx = e.clientX - (rect.left + rect.width / 2);
+  const dy = e.clientY - (rect.top + rect.height / 2);
+  const distance = Math.min(36, Math.hypot(dx, dy));
+  const angle = Math.atan2(dy, dx);
+  const x = Math.cos(angle) * distance;
+  const y = Math.sin(angle) * distance;
+
+  stick.style.transform = `translate(${x}px, ${y}px)`;
+
+  input.side = Math.abs(dx) > 12 ? Math.sign(dx) : 0;
+  input.forward = Math.abs(dy) > 12 ? -Math.sign(dy) : 0;
 }
 
-holdButton("leftBtn", "left");
-holdButton("rightBtn", "right");
+function resetStick() {
+  joyPointer = null;
+  stick.style.transform = "translate(0,0)";
+  input.side = 0;
+  input.forward = 0;
+}
 
-document.getElementById("jumpBtn").addEventListener("pointerdown", e => {
-  e.preventDefault();
-  jumpRequested = true;
+["pointerup", "pointercancel", "lostpointercapture"].forEach(event => {
+  joystick.addEventListener(event, resetStick);
 });
 
-document.getElementById("attackBtn").addEventListener("pointerdown", e => {
-  e.preventDefault();
-  attackRequested = true;
+document.getElementById("jump").addEventListener("pointerdown", () => input.jump = true);
+document.getElementById("jump").addEventListener("pointerup", () => input.jump = false);
+document.getElementById("attack").addEventListener("pointerdown", () => input.attack = true);
+document.getElementById("attack").addEventListener("pointerup", () => input.attack = false);
+
+// Camera drag
+let dragging = false;
+let lastX = 0;
+let lastY = 0;
+
+renderer.domElement.addEventListener("pointerdown", e => {
+  dragging = true;
+  lastX = e.clientX;
+  lastY = e.clientY;
 });
 
-updateMenu();
+window.addEventListener("pointerup", () => dragging = false);
+
+window.addEventListener("pointermove", e => {
+  if (!dragging || !playing || paused) return;
+
+  cameraYaw -= (e.clientX - lastX) * 0.005;
+  cameraPitch += (e.clientY - lastY) * 0.003;
+  cameraPitch = THREE.MathUtils.clamp(cameraPitch, -0.05, 0.8);
+
+  lastX = e.clientX;
+  lastY = e.clientY;
+});
+
+// Main update
+const clockDelta = new THREE.Vector3();
+const forward = new THREE.Vector3();
+const right = new THREE.Vector3();
+const moveDirection = new THREE.Vector3();
+const cameraTarget = new THREE.Vector3();
+
+function updateGame(dt) {
+  if (!playing || paused) return;
+
+  attackCooldown -= dt;
+  damageCooldown -= dt;
+
+  if (messageTimer > 0) {
+    messageTimer -= dt;
+    if (messageTimer <= 0) {
+      document.getElementById("message").textContent = "";
+    }
+  }
+
+  // Camera-relative movement
+  forward.set(-Math.sin(cameraYaw), 0, -Math.cos(cameraYaw));
+  right.set(Math.cos(cameraYaw), 0, -Math.sin(cameraYaw));
+
+  moveDirection.set(0, 0, 0);
+  moveDirection.addScaledVector(forward, input.forward);
+  moveDirection.addScaledVector(right, input.side);
+
+  if (moveDirection.lengthSq() > 0) {
+    moveDirection.normalize();
+
+    player.position.addScaledVector(moveDirection, 5.5 * dt);
+
+    const targetRotation = Math.atan2(moveDirection.x, moveDirection.z);
+    player.rotation.y = THREE.MathUtils.lerp(
+      player.rotation.y,
+      targetRotation,
+      Math.min(1, dt * 10)
+    );
+  }
+
+  player.position.x = THREE.MathUtils.clamp(player.position.x, -20, 20);
+  player.position.z = THREE.MathUtils.clamp(player.position.z, -25, 18);
+
+  // Jump physics
+  if (input.jump && grounded) {
+    jumpVelocity = 7.5;
+    grounded = false;
+  }
+
+  if (!grounded) {
+    jumpVelocity -= 18 * dt;
+    player.position.y += jumpVelocity * dt;
+
+    if (player.position.y <= 0) {
+      player.position.y = 0;
+      jumpVelocity = 0;
+      grounded = true;
+    }
+  }
+
+  // Procedural running animation
+  const moving = moveDirection.lengthSq() > 0;
+  const t = clock.elapsedTime;
+
+  if (!loadedModel) {
+    const swing = moving ? Math.sin(t * 12) * 0.65 : Math.sin(t * 2) * 0.04;
+
+    leftLeg.rotation.x = swing;
+    rightLeg.rotation.x = -swing;
+    leftArm.rotation.x = -swing * 0.8;
+    rightArm.rotation.x = swing * 0.8;
+
+    player.userData.ponytail.rotation.x = -0.3 + Math.sin(t * 8) * 0.08;
+  }
+
+  if (mixer) mixer.update(dt);
+
+  // Attack
+  if (input.attack && attackCooldown <= 0) {
+    attackCooldown = 0.65;
+    attackAnimation = 0.3;
+
+    const distance = player.position.distanceTo(boss.position);
+
+    if (distance < 3.7) {
+      const toBoss = boss.position.clone().sub(player.position).normalize();
+      const facing = new THREE.Vector3(
+        Math.sin(player.rotation.y), 0, Math.cos(player.rotation.y)
+      );
+
+      if (toBoss.dot(facing) > 0.15) {
+        bossHP = Math.max(0, bossHP - 18);
+        boss.position.addScaledVector(toBoss, 0.45);
+        showMessage("KATANA STRIKE!");
+        updateHUD();
+      }
+    }
+  }
+
+  if (attackAnimation > 0) {
+    attackAnimation -= dt;
+    player.userData.sword.rotation.x = -Math.sin(attackAnimation * 10) * 1.4;
+  } else {
+    player.userData.sword.rotation.x = 0;
+  }
+
+  // Collect coins
+  for (const coin of coinObjects) {
+    if (coin.userData.collected) continue;
+
+    coin.rotation.y += dt * 2.5;
+
+    if (coin.position.distanceTo(player.position.clone().add(new THREE.Vector3(0, 1, 0))) < 1.1) {
+      coin.userData.collected = true;
+      coin.visible = false;
+      coins++;
+      updateHUD();
+    }
+  }
+
+  // Boss follows player
+  const bossDistance = boss.position.distanceTo(player.position);
+
+  if (bossHP > 0 && bossDistance > 1.8) {
+    const direction = player.position.clone().sub(boss.position);
+    direction.y = 0;
+    direction.normalize();
+    boss.position.addScaledVector(direction, 1.5 * dt);
+    boss.rotation.y = Math.atan2(direction.x, direction.z);
+  }
+
+  // Boss contact damage
+  if (bossDistance < 1.8 && damageCooldown <= 0) {
+    health = Math.max(0, health - 12);
+    damageCooldown = 1.0;
+    showMessage("DANGER!");
+    updateHUD();
+  }
+
+  // Boss defeated
+  if (bossHP <= 0) {
+    endGame(true);
+    showMessage("BOSS DEFEATED!");
+  }
+
+  if (health <= 0) endGame(false);
+
+  // Camera follow
+  const cameraOffset = new THREE.Vector3(
+    Math.sin(cameraYaw) * 6,
+    3.4 + cameraPitch * 2,
+    Math.cos(cameraYaw) * 6
+  );
+
+  cameraTarget.copy(player.position).add(new THREE.Vector3(0, 1.4, 0));
+
+  const desiredCamera = cameraTarget.clone().add(cameraOffset);
+  camera.position.lerp(desiredCamera, 1 - Math.pow(0.001, dt));
+  camera.lookAt(cameraTarget);
+}
+
+// Render loop
+function animate() {
+  requestAnimationFrame(animate);
+
+  const dt = Math.min(clock.getDelta(), 0.05);
+
+  if (playing && !paused) {
+    updateGame(dt);
+  }
+
+  renderer.render(scene, camera);
+}
+
+animate();
+
+// Responsive screen
+window.addEventListener("resize", () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.7));
+});
+
+// Initial view
+buildEnvironment();
+camera.position.set(0, 4, 10);
+camera.lookAt(0, 1, 0);
+
+document.getElementById("loading").style.display = "none";
