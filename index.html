@@ -3,66 +3,84 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <meta name="theme-color" content="#090817">
-  <title>SHADOW NINJA V4 - 3D</title>
-  <link rel="stylesheet" href="style.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#080b16">
+  <title>SHADOW NINJA V4</title>
+  <link rel="stylesheet" href="./style.css">
+
+  <!-- Three.js module resolver -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    }
+  }
+  </script>
 </head>
 <body>
-  <div id="loading">LOADING SHADOW WORLD...</div>
-
-  <div id="game">
-    <div id="menu" class="panel">
-      <div class="logo">SHADOW <span>NINJA</span></div>
-      <div class="version">REALISTIC ANIME 3D · V4</div>
-      <p class="intro">A new warrior. A dangerous world. One final mission.</p>
-      <div class="stage-select">
-        <button class="stage active" data-stage="0">🌙 Moonlit Forest</button>
-        <button class="stage" data-stage="1">❄️ Frozen Temple</button>
-        <button class="stage" data-stage="2">🔥 Lava Fortress</button>
-      </div>
-      <button id="start" class="primary">ENTER THE SHADOW WORLD</button>
-      <p class="tip">WASD / Joystick · Mouse drag to rotate camera</p>
-    </div>
-
-    <div id="hud" class="hidden">
-      <div class="hud-top">
-        <div class="hud-card">❤️ <b id="health">100</b></div>
-        <div class="hud-card">🪙 <b id="coins">0</b></div>
-        <div class="hud-card">⚔️ <b id="stageName">MOONLIT FOREST</b></div>
-        <button id="pause" class="hud-card">Ⅱ</button>
-      </div>
-      <div id="bossPanel">
-        <div id="bossName">FOREST DEMON</div>
-        <div class="bar"><div id="bossHealth"></div></div>
-      </div>
-      <div id="message"></div>
-    </div>
-
-    <div id="mobileControls" class="hidden">
-      <div id="joystick"><div id="stick"></div></div>
-      <div class="actions">
-        <button id="jump">JUMP</button>
-        <button id="attack">ATTACK</button>
-      </div>
-    </div>
-
-    <div id="pausePanel" class="panel hidden">
-      <h1>PAUSED</h1>
-      <button id="resume" class="primary">RESUME</button>
-      <button id="home" class="secondary">MAIN MENU</button>
-    </div>
-
-    <div id="resultPanel" class="panel hidden">
-      <h1 id="resultTitle">VICTORY</h1>
-      <p id="resultText"></p>
-      <button id="retry" class="primary">PLAY AGAIN</button>
-      <button id="resultHome" class="secondary">MAIN MENU</button>
-    </div>
-
-    <div id="help">Drag to look around · WASD to move · Space to jump · J to attack</div>
+  <div id="loading">
+    <div class="loader"></div>
+    <h1>SHADOW NINJA</h1>
+    <p id="loadingText">LOADING SHADOW WORLD...</p>
   </div>
 
-  <script type="module" src="game.js"></script>
+  <div id="errorBox" class="hidden">
+    <h2>WORLD FAILED TO LOAD</h2>
+    <p id="errorText"></p>
+    <button onclick="location.reload()">TRY AGAIN</button>
+  </div>
+
+  <div id="menu" class="panel hidden">
+    <div class="logo">SHADOW <span>NINJA</span></div>
+    <p class="subtitle">REALISTIC ANIME 3D · V4</p>
+    <p class="intro">A new warrior. A dangerous world. One final mission.</p>
+    <div class="stage-choice">
+      <button class="stage active" data-stage="forest">🌙 Moonlit Forest</button>
+      <button class="stage" data-stage="ice">❄️ Frozen Temple</button>
+      <button class="stage" data-stage="lava">🔥 Lava Fortress</button>
+    </div>
+    <button id="enterBtn" class="primary">ENTER THE SHADOW WORLD</button>
+    <p class="help">WASD / Joystick · Mouse drag to rotate camera</p>
+  </div>
+
+  <div id="hud" class="hidden">
+    <div class="topbar">
+      <div class="hud-card">
+        <span>❤️ HEALTH</span>
+        <div class="health-track"><div id="healthBar"></div></div>
+      </div>
+      <div class="hud-card boss-card">
+        <span id="bossName">FOREST DEMON</span>
+        <div class="health-track boss-track"><div id="bossBar"></div></div>
+      </div>
+      <button id="pauseBtn">Ⅱ</button>
+    </div>
+    <div id="message">DEFEAT THE DEMON</div>
+    <div class="bottom-controls">
+      <div id="joystick">
+        <div id="stick"></div>
+      </div>
+      <div class="action-buttons">
+        <button id="jumpBtn">JUMP</button>
+        <button id="attackBtn">⚔ ATTACK</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="result" class="panel hidden">
+    <h1 id="resultTitle">VICTORY</h1>
+    <p id="resultMessage">The shadow world is safe.</p>
+    <button id="againBtn" class="primary">PLAY AGAIN</button>
+    <button id="homeBtn" class="secondary">MAIN MENU</button>
+  </div>
+
+  <div id="pausePanel" class="panel hidden">
+    <h1>PAUSED</h1>
+    <button id="resumeBtn" class="primary">RESUME</button>
+    <button id="quitBtn" class="secondary">MAIN MENU</button>
+  </div>
+
+  <script type="module" src="./game.js"></script>
 </body>
 </html>
