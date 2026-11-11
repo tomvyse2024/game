@@ -1,142 +1,65 @@
+
 <!DOCTYPE html>
-<html lang="my">
+<html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>BOX COUNTER</title>
-  <link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+    <title>SHADOW NINJA</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-  <main class="app">
+<div class="game-container">
 
-    <header class="header">
-      <div class="logo">📦</div>
-      <div>
-        <h1>BOX COUNTER</h1>
-        <p>Smart Loading & Unloading Counter</p>
-      </div>
+    <header>
+        <div class="logo">SHADOW <span>NINJA</span></div>
+        <div class="stats">
+            <span>⭐ <b id="score">0</b></span>
+            <span>❤️ <b id="health">3</b></span>
+        </div>
     </header>
 
-    <section class="job-card">
-      <h2>အလုပ်အချက်အလက်</h2>
+    <div class="game-box">
+        <canvas id="gameCanvas" width="900" height="500"></canvas>
 
-      <label>ကားနံပါတ်</label>
-      <input id="truckNumber" type="text" placeholder="ဥပမာ - 5A / 1234">
+        <div id="startScreen" class="screen">
+            <h1>SHADOW NINJA</h1>
+            <p>ENTER THE DARKNESS</p>
+            <button id="startBtn">START GAME</button>
+        </div>
 
-      <label>ရေတွက်သူအမည်</label>
-      <input id="operator" type="text" placeholder="အမည်ထည့်ပါ">
-    </section>
+        <div id="gameOverScreen" class="screen hidden">
+            <h1>GAME OVER</h1>
+            <p>YOUR SCORE: <span id="finalScore">0</span></p>
+            <button id="restartBtn">PLAY AGAIN</button>
+        </div>
 
-    <section class="mode-section">
-      <h2>လုပ်ဆောင်မှု ရွေးပါ</h2>
+        <div id="winScreen" class="screen hidden">
+            <h1>VICTORY!</h1>
+            <p>You are the Shadow Ninja!</p>
+            <button id="nextBtn">PLAY AGAIN</button>
+        </div>
+    </div>
 
-      <div class="mode-buttons">
-        <button class="mode-btn active" data-mode="load">
-          ⬆ ပစ္စည်းတင်ခြင်း
-        </button>
-
-        <button class="mode-btn" data-mode="unload">
-          ⬇ ပစ္စည်းချခြင်း
-        </button>
-      </div>
-    </section>
-
-    <section class="counter-card">
-      <p id="counterLabel">စုစုပေါင်း တင်ပြီးသောဖာ</p>
-
-      <div id="count">0</div>
-
-      <p class="unit">ဖာ / ပုံး</p>
-
-      <div class="counter-buttons">
-        <button id="minusBtn" class="minus">− 1</button>
-        <button id="plusBtn" class="plus">+ 1</button>
-      </div>
-
-      <div class="quick-buttons">
-        <button data-add="5">+5</button>
-        <button data-add="10">+10</button>
-        <button data-add="20">+20</button>
-      </div>
-
-      <button id="undoBtn" class="undo-btn">
-        ↶ နောက်ဆုံးလုပ်ဆောင်ချက် ပြန်ဖျက်ရန်
-      </button>
-    </section>
-
-    <section class="voice-card">
-      <h2>🎙️ Voice Counter</h2>
-      <p>အသံနဲ့ အရေအတွက် ပြောပြီး ရေတွက်နိုင်ပါတယ်။</p>
-
-      <label>ဘာသာစကား</label>
-
-      <select id="voiceLanguage">
-        <option value="my-MM">မြန်မာဘာသာ</option>
-        <option value="en-US">English</option>
-      </select>
-
-      <button id="startVoice" class="voice-start">
-        🎤 အသံဖြင့် ရေတွက်မည်
-      </button>
-
-      <button id="stopVoice" class="voice-stop" disabled>
-        အသံရပ်မည်
-      </button>
-
-      <p id="voiceStatus" class="status">
-        အသံစတင်ရန် ခလုတ်နှိပ်ပါ။
-      </p>
-
-      <p id="lastSpeech" class="last-speech"></p>
-    </section>
-
-    <section class="camera-card">
-      <h2>📷 Camera Counter</h2>
-      <p>ဖုန်း သို့မဟုတ် Laptop Camera ကို ဖွင့်နိုင်ပါတယ်။</p>
-
-      <video id="camera" autoplay playsinline muted></video>
-
-      <div class="camera-buttons">
-        <button id="startCamera" class="camera-start">
-          Camera ဖွင့်မည်
-        </button>
-
-        <button id="stopCamera" class="camera-stop" disabled>
-          Camera ပိတ်မည်
-        </button>
-      </div>
-
-      <p id="cameraStatus" class="status">
-        Camera မဖွင့်ရသေးပါ။
-      </p>
-
-      <p class="camera-note">
-        လက်ရှိ Version တွင် Camera Preview နှင့် Manual Count ပါဝင်သည်။
-        Camera မှ အလိုအလျောက်ဖာရေတွက်ခြင်းကို AI Model ထည့်သွင်းပြီးမှ
-        အသုံးပြုနိုင်မည်။
-      </p>
-    </section>
-
-    <section class="history-card">
-      <h2>📋 ရေတွက်မှုမှတ်တမ်း</h2>
-
-      <div id="history">
-        <p class="empty">မှတ်တမ်းမရှိသေးပါ။</p>
-      </div>
-
-      <div class="history-buttons">
-        <button id="exportBtn">⬇ Excel / CSV ထုတ်မည်</button>
-        <button id="resetBtn">Reset</button>
-      </div>
-    </section>
+    <div class="mobile-controls">
+        <div class="movement">
+            <button id="leftBtn">◀</button>
+            <button id="rightBtn">▶</button>
+        </div>
+        <div class="actions">
+            <button id="attackBtn">⚔</button>
+            <button id="jumpBtn">⬆</button>
+        </div>
+    </div>
 
     <footer>
-      BOX COUNTER v1.0
+        MOBILE ADVENTURE GAME
     </footer>
 
-  </main>
+</div>
 
-  <script src="app.js"></script>
+<script src="game.js"></script>
 </body>
 </html>
