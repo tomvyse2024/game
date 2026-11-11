@@ -1,298 +1,161 @@
+
 * {
-  box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
 }
 
 body {
-  margin: 0;
-  font-family: Arial, sans-serif;
-  background: #f1f5f9;
-  color: #1e293b;
+    background: #080b18;
+    color: white;
+    font-family: Arial, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    touch-action: none;
 }
 
-.app {
-  width: 100%;
-  max-width: 650px;
-  margin: auto;
-  padding: 16px;
+.game-container {
+    width: 100%;
+    max-width: 1000px;
+    padding: 12px;
 }
 
-.header {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin-bottom: 20px;
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
 }
 
 .logo {
-  width: 55px;
-  height: 55px;
-  border-radius: 15px;
-  background: #2563eb;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  font-size: 28px;
+    font-size: 23px;
+    font-weight: 900;
+    letter-spacing: 2px;
 }
 
-.header h1 {
-  margin: 0;
-  font-size: 24px;
+.logo span {
+    color: #a855f7;
 }
 
-.header p {
-  margin: 5px 0 0;
-  color: #64748b;
-  font-size: 13px;
+.stats {
+    display: flex;
+    gap: 18px;
+    font-size: 17px;
 }
 
-section {
-  background: white;
-  padding: 18px;
-  margin-bottom: 16px;
-  border-radius: 16px;
-  box-shadow: 0 3px 12px rgba(0,0,0,0.05);
+.game-box {
+    width: 100%;
+    position: relative;
+    border: 2px solid #7438a8;
+    border-radius: 14px;
+    overflow: hidden;
+    background: #11152b;
 }
 
-h2 {
-  margin-top: 0;
-  font-size: 18px;
+canvas {
+    width: 100%;
+    display: block;
+    aspect-ratio: 9 / 5;
+    object-fit: contain;
 }
 
-label {
-  display: block;
-  margin: 12px 0 6px;
-  font-size: 14px;
-  font-weight: bold;
+.screen {
+    position: absolute;
+    inset: 0;
+    background: rgba(5, 7, 20, .91);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 16px;
+    text-align: center;
 }
 
-input,
-select {
-  width: 100%;
-  padding: 13px;
-  border: 1px solid #cbd5e1;
-  border-radius: 9px;
-  font-size: 16px;
-  background: white;
+.screen h1 {
+    color: #c084fc;
+    font-size: clamp(25px, 6vw, 48px);
+    text-shadow: 0 0 20px #a855f7;
 }
 
-button {
-  cursor: pointer;
-  border: none;
-  border-radius: 10px;
-  padding: 13px;
-  font-size: 15px;
-  font-weight: bold;
+.screen p {
+    color: #ddd6fe;
 }
 
-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.screen button {
+    background: #9333ea;
+    color: white;
+    border: none;
+    padding: 15px 35px;
+    border-radius: 10px;
+    font-size: 18px;
+    font-weight: bold;
 }
 
-.mode-buttons {
-  display: flex;
-  gap: 10px;
+.hidden {
+    display: none;
 }
 
-.mode-btn {
-  flex: 1;
-  background: #e2e8f0;
-  color: #334155;
+.mobile-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 18px 8px;
 }
 
-.mode-btn.active {
-  background: #2563eb;
-  color: white;
+.movement, .actions {
+    display: flex;
+    gap: 12px;
 }
 
-.counter-card {
-  text-align: center;
-  background: #0f172a;
-  color: white;
+.mobile-controls button {
+    width: 65px;
+    height: 65px;
+    border-radius: 18px;
+    border: 2px solid #9333ea;
+    background: #17152b;
+    color: white;
+    font-size: 27px;
+    font-weight: bold;
+    touch-action: none;
+    user-select: none;
 }
 
-#counterLabel {
-  color: #cbd5e1;
-  font-size: 16px;
+.mobile-controls button:active {
+    background: #9333ea;
+    transform: scale(.94);
 }
 
-#count {
-  font-size: 90px;
-  font-weight: bold;
-  margin: 10px 0 0;
-  color: #38bdf8;
-  line-height: 1.2;
-}
-
-.unit {
-  color: #cbd5e1;
-}
-
-.counter-buttons {
-  display: flex;
-  gap: 12px;
-  margin-top: 20px;
-}
-
-.counter-buttons button {
-  flex: 1;
-  font-size: 22px;
-  padding: 18px;
-}
-
-.minus {
-  background: #ef4444;
-  color: white;
-}
-
-.plus {
-  background: #16a34a;
-  color: white;
-}
-
-.quick-buttons {
-  display: flex;
-  gap: 10px;
-  margin-top: 12px;
-}
-
-.quick-buttons button {
-  flex: 1;
-  background: #334155;
-  color: white;
-}
-
-.undo-btn {
-  width: 100%;
-  margin-top: 14px;
-  background: #475569;
-  color: white;
-}
-
-.voice-card p,
-.camera-card p {
-  color: #64748b;
-  font-size: 14px;
-}
-
-.voice-start {
-  width: 100%;
-  margin-top: 15px;
-  background: #2563eb;
-  color: white;
-}
-
-.voice-stop {
-  width: 100%;
-  margin-top: 8px;
-  background: #ef4444;
-  color: white;
-}
-
-.status {
-  text-align: center;
-  padding: 10px;
-  background: #f1f5f9;
-  border-radius: 8px;
-}
-
-.last-speech {
-  text-align: center;
-  font-weight: bold;
-  color: #2563eb !important;
-}
-
-#camera {
-  width: 100%;
-  min-height: 200px;
-  max-height: 350px;
-  background: #0f172a;
-  border-radius: 12px;
-  object-fit: contain;
-  display: block;
-  margin-top: 12px;
-}
-
-.camera-buttons {
-  display: flex;
-  gap: 10px;
-  margin-top: 12px;
-}
-
-.camera-buttons button {
-  flex: 1;
-}
-
-.camera-start {
-  background: #16a34a;
-  color: white;
-}
-
-.camera-stop {
-  background: #ef4444;
-  color: white;
-}
-
-.camera-note {
-  font-size: 12px !important;
-  line-height: 1.6;
-}
-
-.history-card {
-  overflow: hidden;
-}
-
-.history-item {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 12px 0;
-  border-bottom: 1px solid #e2e8f0;
-  font-size: 13px;
-}
-
-.history-item strong {
-  color: #2563eb;
-}
-
-.history-buttons {
-  display: flex;
-  gap: 10px;
-  margin-top: 15px;
-}
-
-.history-buttons button {
-  flex: 1;
-  background: #2563eb;
-  color: white;
-}
-
-.history-buttons #resetBtn {
-  background: #ef4444;
-}
-
-.empty {
-  color: #94a3b8;
-  text-align: center;
+#attackBtn {
+    background: #581c87;
 }
 
 footer {
-  text-align: center;
-  color: #94a3b8;
-  font-size: 12px;
-  padding: 20px;
+    text-align: center;
+    color: #77738f;
+    font-size: 11px;
+    letter-spacing: 3px;
 }
 
-@media (max-width: 400px) {
-  #count {
-    font-size: 72px;
-  }
+@media (max-width: 600px) {
+    .game-container {
+        padding: 7px;
+    }
 
-  .header h1 {
-    font-size: 21px;
-  }
+    .logo {
+        font-size: 17px;
+    }
 
-  section {
-    padding: 14px;
-  }
+    .stats {
+        font-size: 14px;
+        gap: 10px;
+    }
+
+    .mobile-controls button {
+        width: 57px;
+        height: 57px;
+    }
 }
