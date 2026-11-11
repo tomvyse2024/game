@@ -1,801 +1,827 @@
 
-import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
-import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/GLTFLoader.js";
+import * as THREE from "three";
 
-const scene = new THREE.Scene();
-scene.background = new THREE.Color("#11152c");
-scene.fog = new THREE.Fog("#11152c", 18, 75);
+const $ = id => document.getElementById(id);
 
-const camera = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.1, 150);
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 1.7));
-renderer.setSize(innerWidth, innerHeight);
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.15;
-document.getElementById("game").prepend(renderer.domElement);
-
-const clock = new THREE.Clock();
-const loader = new GLTFLoader();
-
-let selectedStage = 0;
-let playing = false;
+let scene, camera, renderer, clock;
+let heroine, boss, sword, slash;
+let playerParts = {};
+let keys = {};
+let running = false;
 let paused = false;
+let gameEnded = false;
+let selectedStage = "forest";
 let health = 100;
-let coins = 0;
-let bossHP = 100;
-let attackCooldown = 0;
-let damageCooldown = 0;
-let jumpVelocity = 0;
+let bossHealth = 100;
+let velocityY = 0;
 let grounded = true;
-let attackAnimation = 0;
-let messageTimer = 0;
-let mixer = null;
-let loadedModel = null;
+let attackTime = 0;
+let invulnerable = 0;
+let elapsed = 0;
+let cameraAngle = 0;
+let cameraDistance = 6.5;
+let joystick = { x: 0, y: 0 };
+let lastAttack = 0;
+let particles = [];
+let trees = [];
+let enemies = [];
+let audioContext;
+let animationFrame;
+let playerSpeed = 4.5;
 
-const input = { forward: 0, side: 0, attack: false, jump: false };
-let cameraYaw = 0;
-let cameraPitch = 0.25;
-
-const stages = [
-  {
+const stages = {
+  forest: {
     name: "MOONLIT FOREST",
-    sky: "#111a39",
-    ground: "#263d35",
-    fog: "#111a39",
-    boss: "#a43c69",
-    bossName: "FOREST DEMON",
-    light: 0x9daaff
+    sky: 0x10172c,
+    ground: 0x263a32,
+    fog: 0x172235,
+    boss: 0x8d315d
   },
-  {
+  ice: {
     name: "FROZEN TEMPLE",
-    sky: "#193650",
-    ground: "#7898a9",
-    fog: "#193650",
-    boss: "#52bce8",
-    bossName: "ICE MONSTER",
-    light: 0xbbeaff
+    sky: 0x142d48,
+    ground: 0x8eb7cb,
+    fog: 0x31516c,
+    boss: 0x4ca9e0
   },
-  {
+  lava: {
     name: "LAVA FORTRESS",
-    sky: "#411c25",
-    ground: "#673126",
-    fog: "#411c25",
-    boss: "#f05c38",
-    bossName: "LAVA KING",
-    light: 0xffa36c
+    sky: 0x371622,
+    ground: 0x503027,
+    fog: 0x55231e,
+    boss: 0xe85a36
   }
-];
-
-const mat = (color, roughness = 0.7, metalness = 0) =>
-  new THREE.MeshStandardMaterial({ color, roughness, metalness });
-
-const materials = {
-  black: mat("#191522"),
-  dark: mat("#292033"),
-  red: mat("#c93261"),
-  skin: mat("#e6ae9d"),
-  hair: mat("#17101f", 0.45),
-  gold: mat("#d9ad5d", 0.35, 0.6),
-  white: mat("#f2eafa")
 };
 
-function box(parent, size, material, position, cast = true) {
+function showError(error) {
+  console.error(error);
+  $("loading").classList.add("hidden");
+  $("menu").classList.add("hidden");
+  $("errorBox").classList.remove("hidden");
+  $("errorText").textContent =
+    error?.message || String(error) || "Unknown loading error";
+}
+
+function material(color, roughness = 0.8, metalness = 0) {
+  return new THREE.MeshStandardMaterial({
+    color,
+    roughness,
+    metalness
+  });
+}
+
+function box(parent, name, size, color, position, options = {}) {
   const mesh = new THREE.Mesh(
     new THREE.BoxGeometry(...size),
-    material
+    material(color, options.roughness ?? 0.8, options.metalness ?? 0)
   );
   mesh.position.set(...position);
-  mesh.castShadow = cast;
+  mesh.castShadow = true;
   mesh.receiveShadow = true;
+  mesh.name = name;
   parent.add(mesh);
   return mesh;
 }
 
-function sphere(parent, radius, material, position, scale = [1, 1, 1]) {
+function sphere(parent, name, size, color, position, scale = [1, 1, 1]) {
   const mesh = new THREE.Mesh(
-    new THREE.SphereGeometry(radius, 20, 16),
-    material
+    new THREE.SphereGeometry(size, 24, 18),
+    material(color)
   );
   mesh.position.set(...position);
   mesh.scale.set(...scale);
   mesh.castShadow = true;
+  mesh.name = name;
   parent.add(mesh);
   return mesh;
 }
 
-function cylinder(parent, top, bottom, height, material, position) {
+function capsule(parent, name, radius, length, color, position) {
   const mesh = new THREE.Mesh(
-    new THREE.CylinderGeometry(top, bottom, height, 12),
-    material
+    new THREE.CapsuleGeometry(radius, length, 6, 12),
+    material(color)
   );
   mesh.position.set(...position);
   mesh.castShadow = true;
+  mesh.name = name;
   parent.add(mesh);
   return mesh;
 }
 
-// Lighting
-const ambient = new THREE.HemisphereLight(0xbac8ff, 0x30202c, 1.5);
-scene.add(ambient);
+function makeLimb(parent, name, color, position, radius = 0.095) {
+  const pivot = new THREE.Group();
+  pivot.position.set(...position);
+  parent.add(pivot);
+  const limb = capsule(pivot, name, radius, 0.37, color, [0, -0.22, 0]);
+  return pivot;
+}
 
-const moonLight = new THREE.DirectionalLight(0xd5d8ff, 3);
-moonLight.position.set(-8, 15, 8);
-moonLight.castShadow = true;
-moonLight.shadow.mapSize.set(1024, 1024);
-scene.add(moonLight);
+function createHeroine() {
+  const root = new THREE.Group();
+  root.position.set(0, 0, 0);
+  scene.add(root);
 
-const rimLight = new THREE.PointLight(0xd34b91, 35, 25);
-rimLight.position.set(3, 5, -4);
-scene.add(rimLight);
+  const body = new THREE.Group();
+  root.add(body);
 
-// Ground
-const ground = new THREE.Mesh(
-  new THREE.PlaneGeometry(100, 100),
-  mat("#263d35")
-);
-ground.rotation.x = -Math.PI / 2;
-ground.receiveShadow = true;
-scene.add(ground);
+  const dark = 0x191522;
+  const skin = 0xe7ae9e;
+  const red = 0xb52c55;
+  const hairColor = 0x11101b;
 
-// Decorative environment
-const environment = new THREE.Group();
-scene.add(environment);
+  // Legs
+  playerParts.leftLeg = makeLimb(body, "leftLeg", dark, [-0.13, 0.88, 0]);
+  playerParts.rightLeg = makeLimb(body, "rightLeg", dark, [0.13, 0.88, 0]);
 
-function makeTree(x, z, scale = 1) {
+  // Boots
+  box(body, "leftBoot", [0.23, 0.14, 0.37], dark, [-0.13, 0.16, 0.07]);
+  box(body, "rightBoot", [0.23, 0.14, 0.37], dark, [0.13, 0.16, 0.07]);
+
+  // Torso and waist
+  const torso = capsule(body, "torso", 0.22, 0.45, dark, [0, 1.35, 0]);
+  torso.scale.set(1.08, 1, 0.76);
+
+  const waist = box(body, "waist", [0.4, 0.14, 0.28], red, [0, 1.08, 0]);
+  waist.rotation.z = -0.04;
+
+  // Chest armor
+  const armor = sphere(body, "chestArmor", 0.22, 0x30213a, [0, 1.53, 0.04], [1.1, 0.9, 0.65]);
+  armor.material.metalness = 0.25;
+
+  // Belt
+  box(body, "belt", [0.43, 0.055, 0.3], red, [0, 1.11, 0.02]);
+
+  // Neck and head
+  capsule(body, "neck", 0.09, 0.12, skin, [0, 1.76, 0]);
+  sphere(body, "face", 0.2, skin, [0, 1.98, 0.02], [0.82, 1.13, 0.82]);
+
+  // Face mask
+  const mask = box(body, "faceMask", [0.29, 0.09, 0.25], dark, [0, 1.89, 0.14]);
+  mask.rotation.x = -0.1;
+
+  // Hair cap
+  sphere(body, "hairCap", 0.22, hairColor, [0, 2.09, -0.015], [1.05, 0.72, 1]);
+
+  // Long hair back
+  const longHair = capsule(body, "longHair", 0.105, 0.62, hairColor, [0, 1.83, -0.13]);
+  longHair.rotation.x = -0.18;
+
+  // Ponytail
+  playerParts.ponytail = new THREE.Group();
+  playerParts.ponytail.position.set(0, 2.08, -0.12);
+  body.add(playerParts.ponytail);
+  const tail = capsule(playerParts.ponytail, "ponytail", 0.075, 0.65, hairColor, [0, -0.36, -0.13]);
+  tail.rotation.x = -0.65;
+
+  // Headband
+  const band = box(body, "headband", [0.38, 0.055, 0.28], red, [0, 2.08, 0.01]);
+  band.rotation.z = 0.08;
+
+  // Eyes
+  sphere(body, "leftEye", 0.025, 0x231321, [-0.065, 1.98, 0.193], [1.2, 0.7, 0.4]);
+  sphere(body, "rightEye", 0.025, 0x231321, [0.065, 1.98, 0.193], [1.2, 0.7, 0.4]);
+
+  // Arms
+  playerParts.leftArm = makeLimb(body, "leftArm", dark, [-0.28, 1.53, 0], 0.09);
+  playerParts.rightArm = makeLimb(body, "rightArm", dark, [0.28, 1.53, 0], 0.09);
+
+  // Gloves
+  sphere(body, "leftGlove", 0.1, red, [-0.28, 1.23, 0.02]);
+  sphere(body, "rightGlove", 0.1, red, [0.28, 1.23, 0.02]);
+
+  // Scarf
+  playerParts.scarf = new THREE.Group();
+  playerParts.scarf.position.set(0, 1.69, -0.08);
+  body.add(playerParts.scarf);
+
+  const scarfTail = box(
+    playerParts.scarf, "scarfTail",
+    [0.12, 0.52, 0.045], red, [-0.18, -0.27, -0.05]
+  );
+  scarfTail.rotation.z = -0.38;
+
+  // Katana attached to right hand
+  sword = new THREE.Group();
+  sword.position.set(0.32, 1.25, 0.02);
+  sword.rotation.z = -0.4;
+  body.add(sword);
+
+  box(sword, "handle", [0.055, 0.38, 0.055], 0x291b25, [0, -0.13, 0]);
+  box(sword, "guard", [0.22, 0.045, 0.07], 0xc5a16a, [0, 0.08, 0]);
+  box(sword, "blade", [0.055, 0.92, 0.035], 0xcbd8ed, [0, 0.55, 0], { metalness: 0.85, roughness: 0.2 });
+
+  playerParts.body = body;
+  heroine = root;
+  return root;
+}
+
+function createBoss() {
+  boss = new THREE.Group();
+  boss.position.set(0, 0, -9);
+  scene.add(boss);
+
+  const color = stages[selectedStage].boss;
+
+  capsule(boss, "bossBody", 0.65, 1.1, color, [0, 1.15, 0]);
+  sphere(boss, "bossHead", 0.58, color, [0, 2.15, 0]);
+  sphere(boss, "bossEyeL", 0.11, 0xff3131, [-0.22, 2.18, 0.49]);
+  sphere(boss, "bossEyeR", 0.11, 0xff3131, [0.22, 2.18, 0.49]);
+
+  const hornL = capsule(boss, "hornL", 0.12, 0.45, 0xe7d5d4, [-0.42, 2.65, 0]);
+  const hornR = capsule(boss, "hornR", 0.12, 0.45, 0xe7d5d4, [0.42, 2.65, 0]);
+  hornL.rotation.z = 0.5;
+  hornR.rotation.z = -0.5;
+
+  makeLimb(boss, "bossArmL", color, [-0.75, 1.55, 0], 0.22);
+  makeLimb(boss, "bossArmR", color, [0.75, 1.55, 0], 0.22);
+
+  boss.userData.attackClock = 0;
+}
+
+function createTree(x, z, scale = 1) {
   const tree = new THREE.Group();
   tree.position.set(x, 0, z);
   tree.scale.setScalar(scale);
+  scene.add(tree);
 
-  cylinder(tree, 0.35, 0.5, 4, mat("#34272b"), [0, 2, 0]);
+  const trunk = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.13, 0.22, 3.4, 8),
+    material(0x342a2c)
+  );
+  trunk.position.y = 1.7;
+  trunk.castShadow = true;
+  tree.add(trunk);
+
+  const leafColor = selectedStage === "ice" ? 0x7399ae :
+    selectedStage === "lava" ? 0x63312a : 0x173d37;
 
   for (let i = 0; i < 3; i++) {
-    const crown = sphere(
-      tree,
-      1.3 - i * 0.12,
-      mat(i % 2 ? "#233b3a" : "#304a43"),
-      [0, 3.1 + i * 0.7, 0],
-      [1, 0.8, 1]
+    const leaf = new THREE.Mesh(
+      new THREE.ConeGeometry(1.15 - i * 0.18, 2, 8),
+      material(leafColor)
     );
+    leaf.position.y = 2.8 + i * 0.9;
+    leaf.castShadow = true;
+    tree.add(leaf);
   }
 
-  environment.add(tree);
+  trees.push(tree);
 }
 
-function buildEnvironment() {
-  environment.clear();
+function createWorld() {
+  const stage = stages[selectedStage];
 
+  scene.background = new THREE.Color(stage.sky);
+  scene.fog = new THREE.Fog(stage.fog, 14, 55);
+
+  const hemi = new THREE.HemisphereLight(0xa7c4ff, 0x22202b, 2);
+  scene.add(hemi);
+
+  const moonLight = new THREE.DirectionalLight(0xc4d6ff, 2.3);
+  moonLight.position.set(-8, 14, 8);
+  moonLight.castShadow = true;
+  moonLight.shadow.mapSize.set(1024, 1024);
+  moonLight.shadow.camera.left = -20;
+  moonLight.shadow.camera.right = 20;
+  moonLight.shadow.camera.top = 20;
+  moonLight.shadow.camera.bottom = -20;
+  scene.add(moonLight);
+
+  const moon = new THREE.Mesh(
+    new THREE.SphereGeometry(1.4, 32, 24),
+    new THREE.MeshBasicMaterial({ color: 0xe9edff })
+  );
+  moon.position.set(-12, 13, -22);
+  scene.add(moon);
+
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(100, 100),
+    material(stage.ground)
+  );
+  floor.rotation.x = -Math.PI / 2;
+  floor.receiveShadow = true;
+  scene.add(floor);
+
+  // Path
+  const path = new THREE.Mesh(
+    new THREE.PlaneGeometry(5, 40),
+    material(selectedStage === "ice" ? 0x9bbccc : selectedStage === "lava" ? 0x765044 : 0x35443b)
+  );
+  path.rotation.x = -Math.PI / 2;
+  path.position.set(0, 0.015, -10);
+  scene.add(path);
+
+  // Trees along both sides
+  trees = [];
+  for (let z = -27; z < 14; z += 4) {
+    createTree(-5 - Math.random() * 3, z, 0.8 + Math.random() * 0.8);
+    createTree(5 + Math.random() * 3, z - 1, 0.8 + Math.random() * 0.8);
+  }
+
+  // Rocks
   for (let i = 0; i < 22; i++) {
-    const side = i % 2 === 0 ? -1 : 1;
-    makeTree(
-      side * (7 + Math.random() * 15),
-      -20 + Math.random() * 45,
-      0.7 + Math.random() * 0.8
+    const rock = new THREE.Mesh(
+      new THREE.DodecahedronGeometry(0.35 + Math.random() * 0.5, 0),
+      material(selectedStage === "ice" ? 0x7e9cae : 0x383642)
     );
+    rock.position.set((Math.random() - 0.5) * 18, 0.25, -24 + Math.random() * 38);
+    rock.rotation.set(Math.random(), Math.random(), Math.random());
+    rock.castShadow = true;
+    scene.add(rock);
   }
 
-  const moon = sphere(
-    environment, 2.4, mat("#f0e9ff", 1),
-    [-14, 13, -25]
-  );
-
-  const glow = new THREE.PointLight(0xc7caff, 25, 40);
-  glow.position.set(-14, 13, -23);
-  environment.add(glow);
-
-  // Floating atmospheric particles
-  const particleGeometry = new THREE.BufferGeometry();
-  const positions = [];
-
-  for (let i = 0; i < 150; i++) {
-    positions.push(
-      (Math.random() - 0.5) * 45,
-      Math.random() * 10,
-      (Math.random() - 0.5) * 50
-    );
+  // Ground glow lights
+  if (selectedStage === "lava") {
+    for (let i = 0; i < 8; i++) {
+      const light = new THREE.PointLight(0xff512f, 2, 7);
+      light.position.set((Math.random() - 0.5) * 12, 0.6, -25 + Math.random() * 35);
+      scene.add(light);
+    }
   }
-
-  particleGeometry.setAttribute(
-    "position",
-    new THREE.Float32BufferAttribute(positions, 3)
-  );
-
-  const particles = new THREE.Points(
-    particleGeometry,
-    new THREE.PointsMaterial({
-      color: 0xf7b6db,
-      size: 0.08,
-      transparent: true,
-      opacity: 0.8
-    })
-  );
-
-  environment.add(particles);
 }
 
-// Character rig
-const player = new THREE.Group();
-scene.add(player);
-
-const rig = new THREE.Group();
-player.add(rig);
-
-const leftArm = new THREE.Group();
-const rightArm = new THREE.Group();
-const leftLeg = new THREE.Group();
-const rightLeg = new THREE.Group();
-
-function makeLimb(parent, length, material, radius = 0.13) {
-  const mesh = new THREE.Mesh(
-    new THREE.CapsuleGeometry(radius, length, 4, 8),
-    material
-  );
-  mesh.position.y = -length / 2;
-  mesh.castShadow = true;
-  parent.add(mesh);
-  return mesh;
+function createParticles(position, color, amount = 12) {
+  for (let i = 0; i < amount; i++) {
+    const mesh = new THREE.Mesh(
+      new THREE.SphereGeometry(0.055, 6, 6),
+      new THREE.MeshBasicMaterial({ color })
+    );
+    mesh.position.copy(position);
+    scene.add(mesh);
+    particles.push({
+      mesh,
+      velocity: new THREE.Vector3(
+        (Math.random() - 0.5) * 5,
+        Math.random() * 4,
+        (Math.random() - 0.5) * 5
+      ),
+      life: 0.55
+    });
+  }
 }
 
-function buildNinja() {
-  rig.clear();
-
-  // Legs
-  leftLeg.position.set(-0.19, 0.9, 0);
-  rightLeg.position.set(0.19, 0.9, 0);
-  rig.add(leftLeg, rightLeg);
-
-  makeLimb(leftLeg, 0.75, materials.black, 0.14);
-  makeLimb(rightLeg, 0.75, materials.black, 0.14);
-
-  // Boots
-  box(leftLeg, [0.32, 0.16, 0.48], materials.red, [0, -0.78, 0.08]);
-  box(rightLeg, [0.32, 0.16, 0.48], materials.red, [0, -0.78, 0.08]);
-
-  // Body
-  const torso = new THREE.Mesh(
-    new THREE.CapsuleGeometry(0.31, 0.6, 5, 12),
-    materials.dark
-  );
-  torso.position.y = 1.48;
-  torso.castShadow = true;
-  rig.add(torso);
-
-  // Suit details
-  box(rig, [0.48, 0.12, 0.48], materials.red, [0, 1.15, 0]);
-  box(rig, [0.12, 0.65, 0.04], materials.gold, [0, 1.45, 0.29]);
-
-  // Neck and head
-  cylinder(rig, 0.11, 0.13, 0.2, materials.skin, [0, 1.91, 0]);
-  sphere(rig, 0.29, materials.skin, [0, 2.22, 0], [0.84, 1.05, 0.86]);
-
-  // Hair cap and long hair
-  sphere(rig, 0.3, materials.hair, [0, 2.36, -0.06], [1.02, 0.75, 1.0]);
-
-  const ponytail = sphere(
-    rig, 0.18, materials.hair,
-    [0, 2.18, -0.4],
-    [0.75, 2.8, 0.75]
-  );
-
-  ponytail.rotation.x = -0.3;
-
-  // Side hair
-  sphere(rig, 0.13, materials.hair, [-0.25, 2.08, 0.02], [0.6, 1.7, 0.7]);
-  sphere(rig, 0.13, materials.hair, [0.25, 2.08, 0.02], [0.6, 1.7, 0.7]);
-
-  // Eyes and headband
-  box(rig, [0.42, 0.055, 0.05], materials.red, [0, 2.3, 0.245]);
-  sphere(rig, 0.035, materials.dark, [-0.1, 2.23, 0.25]);
-  sphere(rig, 0.035, materials.dark, [0.1, 2.23, 0.25]);
-
-  // Scarf
-  const scarf = box(rig, [0.18, 0.1, 0.7], materials.red, [-0.2, 1.72, -0.42]);
-  scarf.rotation.x = -0.3;
-
-  // Arms
-  leftArm.position.set(-0.38, 1.72, 0);
-  rightArm.position.set(0.38, 1.72, 0);
-  rig.add(leftArm, rightArm);
-
-  makeLimb(leftArm, 0.65, materials.black, 0.12);
-  makeLimb(rightArm, 0.65, materials.black, 0.12);
-
-  sphere(leftArm, 0.12, materials.skin, [0, -0.7, 0]);
-  sphere(rightArm, 0.12, materials.skin, [0, -0.7, 0]);
-
-  // Katana
-  const sword = new THREE.Group();
-  sword.position.set(0, -0.72, 0.12);
-  rightArm.add(sword);
-
-  cylinder(sword, 0.035, 0.035, 0.55, materials.gold, [0, -0.28, 0]);
-  const blade = new THREE.Mesh(
-    new THREE.BoxGeometry(0.055, 1.2, 0.035),
-    mat("#dbe9ff", 0.2, 0.8)
-  );
-  blade.position.y = -1.05;
-  sword.add(blade);
-
-  player.userData.sword = sword;
-  player.userData.ponytail = ponytail;
-}
-
-buildNinja();
-
-// Optional replacement with a proper animated GLB character model.
-// Example: loadNinjaModel("./assets/akira.glb")
-window.loadNinjaModel = async function(url) {
+function playSound(frequency = 450, duration = 0.12) {
   try {
-    const gltf = await loader.loadAsync(url);
+    audioContext ??= new AudioContext();
+    if (audioContext.state === "suspended") audioContext.resume();
 
-    if (loadedModel) player.remove(loadedModel);
+    const oscillator = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+    oscillator.type = "triangle";
+    oscillator.frequency.value = frequency;
+    gain.gain.setValueAtTime(0.07, audioContext.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + duration);
+    oscillator.connect(gain);
+    gain.connect(audioContext.destination);
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime + duration);
+  } catch (e) {
+    console.warn("Audio unavailable", e);
+  }
+}
 
-    loadedModel = gltf.scene;
-    loadedModel.scale.setScalar(1.5);
-    loadedModel.position.set(0, 0, 0);
+function init() {
+  scene = new THREE.Scene();
+  clock = new THREE.Clock();
 
-    player.add(loadedModel);
-    rig.visible = false;
+  camera = new THREE.PerspectiveCamera(
+    65, window.innerWidth / window.innerHeight, 0.1, 150
+  );
 
-    if (mixer) mixer.stopAllAction();
-    mixer = new THREE.AnimationMixer(loadedModel);
+  renderer = new THREE.WebGLRenderer({
+    antialias: true,
+    powerPreference: "high-performance"
+  });
 
-    if (gltf.animations.length) {
-      mixer.clipAction(gltf.animations[0]).play();
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.7));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.15;
+
+  document.body.appendChild(renderer.domElement);
+  renderer.domElement.id = "world";
+
+  createWorld();
+  createHeroine();
+  createBoss();
+
+  camera.position.set(0, 4, 7);
+  camera.lookAt(0, 1.5, 0);
+
+  setupControls();
+  window.addEventListener("resize", resize);
+
+  $("loading").classList.add("hidden");
+  $("menu").classList.remove("hidden");
+  $("loadingText").textContent = "WORLD READY";
+
+  animate();
+}
+
+function setupControls() {
+  window.addEventListener("keydown", e => {
+    keys[e.code] = true;
+    if (e.code === "Space") e.preventDefault();
+    if (e.code === "KeyJ" && running && !paused) attack();
+  });
+
+  window.addEventListener("keyup", e => {
+    keys[e.code] = false;
+  });
+
+  // Drag to rotate camera
+  let dragging = false;
+  let previousX = 0;
+
+  renderer.domElement.addEventListener("pointerdown", e => {
+    if (e.pointerType === "mouse" || e.clientY < window.innerHeight * 0.65) {
+      dragging = true;
+      previousX = e.clientX;
     }
+  });
 
-    console.log("3D Ninja model loaded.");
-  } catch (error) {
-    console.error("Could not load the GLB model:", error);
+  window.addEventListener("pointermove", e => {
+    if (!dragging || paused) return;
+    cameraAngle -= (e.clientX - previousX) * 0.006;
+    previousX = e.clientX;
+  });
+
+  window.addEventListener("pointerup", () => dragging = false);
+
+  $("jumpBtn").addEventListener("pointerdown", e => {
+    e.preventDefault();
+    jump();
+  });
+
+  $("attackBtn").addEventListener("pointerdown", e => {
+    e.preventDefault();
+    attack();
+  });
+
+  // Joystick
+  const joy = $("joystick");
+  const stick = $("stick");
+  let joyPointer = null;
+
+  function moveStick(e) {
+    const rect = joy.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    let dx = e.clientX - centerX;
+    let dy = e.clientY - centerY;
+    const max = 30;
+    const length = Math.hypot(dx, dy);
+    if (length > max) {
+      dx = dx / length * max;
+      dy = dy / length * max;
+    }
+    joystick.x = dx / max;
+    joystick.y = dy / max;
+    stick.style.transform = `translate(${dx}px, ${dy}px)`;
   }
-};
 
-// Boss
-const boss = new THREE.Group();
-scene.add(boss);
+  joy.addEventListener("pointerdown", e => {
+    e.preventDefault();
+    joyPointer = e.pointerId;
+    joy.setPointerCapture(e.pointerId);
+    moveStick(e);
+  });
 
-const bossBody = new THREE.Mesh(
-  new THREE.CapsuleGeometry(0.65, 1.15, 5, 12),
-  mat("#a43c69", 0.45)
-);
-bossBody.position.y = 1.3;
-bossBody.castShadow = true;
-boss.add(bossBody);
+  joy.addEventListener("pointermove", e => {
+    if (e.pointerId === joyPointer) moveStick(e);
+  });
 
-sphere(boss, 0.48, mat("#4a263f"), [0, 2.2, 0], [1, 1.1, 0.9]);
-sphere(boss, 0.08, mat("#ff302e", 0.2, 0.2), [-0.19, 2.25, 0.4]);
-sphere(boss, 0.08, mat("#ff302e", 0.2, 0.2), [0.19, 2.25, 0.4]);
+  function releaseJoy() {
+    joyPointer = null;
+    joystick.x = 0;
+    joystick.y = 0;
+    stick.style.transform = "translate(0,0)";
+  }
 
-// Boss horns
-const hornMat = mat("#eee2e9");
-const horn1 = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.65, 8), hornMat);
-horn1.position.set(-0.35, 2.8, 0);
-horn1.rotation.z = 0.35;
-boss.add(horn1);
+  joy.addEventListener("pointerup", releaseJoy);
+  joy.addEventListener("pointercancel", releaseJoy);
 
-const horn2 = horn1.clone();
-horn2.position.x = 0.35;
-horn2.rotation.z = -0.35;
-boss.add(horn2);
+  $("pauseBtn").onclick = pauseGame;
+  $("resumeBtn").onclick = resumeGame;
+  $("quitBtn").onclick = goHome;
+  $("homeBtn").onclick = goHome;
+  $("againBtn").onclick = startGame;
 
-// Coin objects
-const coinObjects = [];
+  $("enterBtn").onclick = startGame;
 
-function makeCoins() {
-  coinObjects.forEach(c => scene.remove(c));
-  coinObjects.length = 0;
+  document.querySelectorAll(".stage").forEach(button => {
+    button.onclick = () => {
+      selectedStage = button.dataset.stage;
+      document.querySelectorAll(".stage").forEach(b => b.classList.remove("active"));
+      button.classList.add("active");
+    };
+  });
+}
 
-  for (let i = 0; i < 9; i++) {
-    const coin = new THREE.Mesh(
-      new THREE.TorusGeometry(0.22, 0.07, 8, 18),
-      mat("#ffd65b", 0.25, 0.7)
+function jump() {
+  if (!running || paused || !grounded) return;
+  velocityY = 8.3;
+  grounded = false;
+  playSound(620);
+}
+
+function attack() {
+  if (!running || paused || gameEnded || elapsed - lastAttack < 0.55) return;
+
+  lastAttack = elapsed;
+  attackTime = 0.38;
+  sword.rotation.z = -1.6;
+  playSound(760, 0.18);
+
+  const distance = heroine.position.distanceTo(boss.position);
+  if (distance < 3.6) {
+    bossHealth = Math.max(0, bossHealth - 22);
+    createParticles(
+      boss.position.clone().add(new THREE.Vector3(0, 1.6, 0)),
+      0xff7aa8,
+      16
     );
+    updateHUD();
 
-    coin.position.set(
-      -7 + i * 1.8,
-      1.1 + (i % 2) * 0.5,
-      -4 - (i % 3) * 2
-    );
-
-    coin.userData.collected = false;
-    scene.add(coin);
-    coinObjects.push(coin);
+    if (bossHealth <= 0) finishGame(true);
   }
 }
 
-// Stage setup
-function setupStage() {
-  const s = stages[selectedStage];
-
-  scene.background = new THREE.Color(s.sky);
-  scene.fog.color.set(s.fog);
-  ground.material.color.set(s.ground);
-  bossBody.material.color.set(s.boss);
-  rimLight.color.set(s.light);
-
-  document.getElementById("stageName").textContent = s.name;
-  document.getElementById("bossName").textContent = s.bossName;
-
-  buildEnvironment();
-  makeCoins();
-
-  player.position.set(0, 0, 5);
-  player.rotation.y = Math.PI;
-
-  boss.position.set(0, 0, -9);
-  bossHP = 100;
-  health = 100;
-  coins = 0;
-
-  updateHUD();
-}
-
-// HUD
 function updateHUD() {
-  document.getElementById("health").textContent = health;
-  document.getElementById("coins").textContent = coins;
-  document.getElementById("bossHealth").style.width = bossHP + "%";
+  $("healthBar").style.width = health + "%";
+  $("bossBar").style.width = bossHealth + "%";
 }
 
-function showMessage(text) {
-  const el = document.getElementById("message");
-  el.textContent = text;
-  messageTimer = 1.5;
-}
+function updatePlayer(dt) {
+  const forwardInput =
+    (keys.KeyW || keys.ArrowUp ? 1 : 0) -
+    (keys.KeyS || keys.ArrowDown ? 1 : 0) - joystick.y;
 
-// Start game
-function startGame() {
-  document.getElementById("menu").classList.add("hidden");
-  document.getElementById("pausePanel").classList.add("hidden");
-  document.getElementById("resultPanel").classList.add("hidden");
-  document.getElementById("hud").classList.remove("hidden");
+  const sideInput =
+    (keys.KeyD || keys.ArrowRight ? 1 : 0) -
+    (keys.KeyA || keys.ArrowLeft ? 1 : 0) + joystick.x;
 
-  if (innerWidth < 850 || "ontouchstart" in window) {
-    document.getElementById("mobileControls").classList.remove("hidden");
-  }
+  const input = new THREE.Vector2(sideInput, forwardInput);
+  if (input.length() > 1) input.normalize();
 
-  document.getElementById("help").style.display = "none";
+  const moving = input.length() > 0.08;
+  const angle = cameraAngle;
 
-  setupStage();
-  playing = true;
-  paused = false;
-  clock.start();
-  showMessage("DEFEAT THE BOSS!");
-}
+  const forward = new THREE.Vector3(
+    -Math.sin(angle), 0, -Math.cos(angle)
+  );
+  const right = new THREE.Vector3(
+    Math.cos(angle), 0, -Math.sin(angle)
+  );
 
-document.getElementById("start").onclick = startGame;
+  const direction = new THREE.Vector3()
+    .addScaledVector(forward, input.y)
+    .addScaledVector(right, input.x);
 
-// Stage selection
-document.querySelectorAll(".stage").forEach(button => {
-  button.onclick = () => {
-    selectedStage = Number(button.dataset.stage);
-    document.querySelectorAll(".stage").forEach(b => b.classList.remove("active"));
-    button.classList.add("active");
-  };
-});
+  if (moving) {
+    direction.normalize();
+    heroine.position.addScaledVector(direction, playerSpeed * dt);
 
-// Pause and result screens
-function pauseGame() {
-  if (!playing) return;
-  paused = true;
-  document.getElementById("pausePanel").classList.remove("hidden");
-}
-
-function resumeGame() {
-  paused = false;
-  document.getElementById("pausePanel").classList.add("hidden");
-  clock.getDelta();
-}
-
-function endGame(victory) {
-  playing = false;
-
-  document.getElementById("resultPanel").classList.remove("hidden");
-  document.getElementById("resultTitle").textContent =
-    victory ? "VICTORY!" : "GAME OVER";
-
-  document.getElementById("resultText").textContent =
-    victory
-      ? "The shadow world is safe... for now."
-      : "The darkness has won this time. Try again.";
-}
-
-document.getElementById("pause").onclick = pauseGame;
-document.getElementById("resume").onclick = resumeGame;
-document.getElementById("retry").onclick = startGame;
-
-function goHome() {
-  playing = false;
-  paused = false;
-
-  document.getElementById("menu").classList.remove("hidden");
-  document.getElementById("hud").classList.add("hidden");
-  document.getElementById("mobileControls").classList.add("hidden");
-  document.getElementById("pausePanel").classList.add("hidden");
-  document.getElementById("resultPanel").classList.add("hidden");
-}
-
-document.getElementById("home").onclick = goHome;
-document.getElementById("resultHome").onclick = goHome;
-
-// Keyboard
-window.addEventListener("keydown", e => {
-  if (e.code === "KeyW" || e.code === "ArrowUp") input.forward = 1;
-  if (e.code === "KeyS" || e.code === "ArrowDown") input.forward = -1;
-  if (e.code === "KeyA" || e.code === "ArrowLeft") input.side = -1;
-  if (e.code === "KeyD" || e.code === "ArrowRight") input.side = 1;
-  if (e.code === "Space") input.jump = true;
-  if (e.code === "KeyJ" || e.code === "KeyK") input.attack = true;
-  if (e.code === "Escape") pauseGame();
-});
-
-window.addEventListener("keyup", e => {
-  if (["KeyW", "ArrowUp", "KeyS", "ArrowDown"].includes(e.code)) input.forward = 0;
-  if (["KeyA", "ArrowLeft", "KeyD", "ArrowRight"].includes(e.code)) input.side = 0;
-  if (e.code === "Space") input.jump = false;
-  if (e.code === "KeyJ" || e.code === "KeyK") input.attack = false;
-});
-
-// Touch joystick
-const joystick = document.getElementById("joystick");
-const stick = document.getElementById("stick");
-let joyPointer = null;
-
-joystick.addEventListener("pointerdown", e => {
-  joyPointer = e.pointerId;
-  joystick.setPointerCapture(joyPointer);
-  moveStick(e);
-});
-
-joystick.addEventListener("pointermove", e => {
-  if (e.pointerId === joyPointer) moveStick(e);
-});
-
-function moveStick(e) {
-  const rect = joystick.getBoundingClientRect();
-  const dx = e.clientX - (rect.left + rect.width / 2);
-  const dy = e.clientY - (rect.top + rect.height / 2);
-  const distance = Math.min(36, Math.hypot(dx, dy));
-  const angle = Math.atan2(dy, dx);
-  const x = Math.cos(angle) * distance;
-  const y = Math.sin(angle) * distance;
-
-  stick.style.transform = `translate(${x}px, ${y}px)`;
-
-  input.side = Math.abs(dx) > 12 ? Math.sign(dx) : 0;
-  input.forward = Math.abs(dy) > 12 ? -Math.sign(dy) : 0;
-}
-
-function resetStick() {
-  joyPointer = null;
-  stick.style.transform = "translate(0,0)";
-  input.side = 0;
-  input.forward = 0;
-}
-
-["pointerup", "pointercancel", "lostpointercapture"].forEach(event => {
-  joystick.addEventListener(event, resetStick);
-});
-
-document.getElementById("jump").addEventListener("pointerdown", () => input.jump = true);
-document.getElementById("jump").addEventListener("pointerup", () => input.jump = false);
-document.getElementById("attack").addEventListener("pointerdown", () => input.attack = true);
-document.getElementById("attack").addEventListener("pointerup", () => input.attack = false);
-
-// Camera drag
-let dragging = false;
-let lastX = 0;
-let lastY = 0;
-
-renderer.domElement.addEventListener("pointerdown", e => {
-  dragging = true;
-  lastX = e.clientX;
-  lastY = e.clientY;
-});
-
-window.addEventListener("pointerup", () => dragging = false);
-
-window.addEventListener("pointermove", e => {
-  if (!dragging || !playing || paused) return;
-
-  cameraYaw -= (e.clientX - lastX) * 0.005;
-  cameraPitch += (e.clientY - lastY) * 0.003;
-  cameraPitch = THREE.MathUtils.clamp(cameraPitch, -0.05, 0.8);
-
-  lastX = e.clientX;
-  lastY = e.clientY;
-});
-
-// Main update
-const clockDelta = new THREE.Vector3();
-const forward = new THREE.Vector3();
-const right = new THREE.Vector3();
-const moveDirection = new THREE.Vector3();
-const cameraTarget = new THREE.Vector3();
-
-function updateGame(dt) {
-  if (!playing || paused) return;
-
-  attackCooldown -= dt;
-  damageCooldown -= dt;
-
-  if (messageTimer > 0) {
-    messageTimer -= dt;
-    if (messageTimer <= 0) {
-      document.getElementById("message").textContent = "";
-    }
-  }
-
-  // Camera-relative movement
-  forward.set(-Math.sin(cameraYaw), 0, -Math.cos(cameraYaw));
-  right.set(Math.cos(cameraYaw), 0, -Math.sin(cameraYaw));
-
-  moveDirection.set(0, 0, 0);
-  moveDirection.addScaledVector(forward, input.forward);
-  moveDirection.addScaledVector(right, input.side);
-
-  if (moveDirection.lengthSq() > 0) {
-    moveDirection.normalize();
-
-    player.position.addScaledVector(moveDirection, 5.5 * dt);
-
-    const targetRotation = Math.atan2(moveDirection.x, moveDirection.z);
-    player.rotation.y = THREE.MathUtils.lerp(
-      player.rotation.y,
+    const targetRotation = Math.atan2(direction.x, direction.z);
+    heroine.rotation.y = THREE.MathUtils.lerp(
+      heroine.rotation.y,
       targetRotation,
-      Math.min(1, dt * 10)
+      Math.min(1, dt * 12)
     );
   }
 
-  player.position.x = THREE.MathUtils.clamp(player.position.x, -20, 20);
-  player.position.z = THREE.MathUtils.clamp(player.position.z, -25, 18);
+  heroine.position.x = THREE.MathUtils.clamp(heroine.position.x, -13, 13);
+  heroine.position.z = THREE.MathUtils.clamp(heroine.position.z, -29, 12);
 
-  // Jump physics
-  if (input.jump && grounded) {
-    jumpVelocity = 7.5;
-    grounded = false;
+  // Gravity
+  velocityY -= 19 * dt;
+  heroine.position.y += velocityY * dt;
+
+  if (heroine.position.y <= 0) {
+    heroine.position.y = 0;
+    velocityY = 0;
+    grounded = true;
   }
 
-  if (!grounded) {
-    jumpVelocity -= 18 * dt;
-    player.position.y += jumpVelocity * dt;
+  // Character animation
+  const swing = moving ? Math.sin(elapsed * 11) * 0.7 : Math.sin(elapsed * 2) * 0.04;
+  playerParts.leftLeg.rotation.x = swing;
+  playerParts.rightLeg.rotation.x = -swing;
+  playerParts.leftArm.rotation.x = -swing * 0.6;
+  playerParts.rightArm.rotation.x = swing * 0.6;
 
-    if (player.position.y <= 0) {
-      player.position.y = 0;
-      jumpVelocity = 0;
-      grounded = true;
-    }
+  playerParts.ponytail.rotation.x = Math.sin(elapsed * 5) * 0.18;
+  playerParts.scarf.rotation.z = moving ? Math.sin(elapsed * 9) * 0.2 : Math.sin(elapsed * 2) * 0.06;
+
+  playerParts.body.position.y = grounded
+    ? Math.abs(Math.sin(elapsed * (moving ? 11 : 2))) * (moving ? 0.07 : 0.018)
+    : 0.05;
+
+  if (attackTime > 0) {
+    attackTime -= dt;
+    sword.rotation.z = -1.6 + (0.9 * (attackTime / 0.38));
+  } else {
+    sword.rotation.z = THREE.MathUtils.lerp(sword.rotation.z, -0.4, dt * 12);
   }
 
-  // Procedural running animation
-  const moving = moveDirection.lengthSq() > 0;
-  const t = clock.elapsedTime;
-
-  if (!loadedModel) {
-    const swing = moving ? Math.sin(t * 12) * 0.65 : Math.sin(t * 2) * 0.04;
-
-    leftLeg.rotation.x = swing;
-    rightLeg.rotation.x = -swing;
-    leftArm.rotation.x = -swing * 0.8;
-    rightArm.rotation.x = swing * 0.8;
-
-    player.userData.ponytail.rotation.x = -0.3 + Math.sin(t * 8) * 0.08;
+  if (invulnerable > 0) {
+    invulnerable -= dt;
+    playerParts.body.visible = Math.floor(elapsed * 15) % 2 === 0;
+  } else {
+    playerParts.body.visible = true;
   }
+}
 
-  if (mixer) mixer.update(dt);
+function updateBoss(dt) {
+  if (bossHealth <= 0) return;
 
-  // Attack
-  if (input.attack && attackCooldown <= 0) {
-    attackCooldown = 0.65;
-    attackAnimation = 0.3;
+  const distance = boss.position.distanceTo(heroine.position);
 
-    const distance = player.position.distanceTo(boss.position);
+  if (distance > 2.4) {
+    const direction = heroine.position.clone().sub(boss.position);
+    direction.y = 0;
+    direction.normalize();
+    boss.position.addScaledVector(direction, 1.3 * dt);
+    boss.rotation.y = Math.atan2(direction.x, direction.z);
+  } else {
+    boss.userData.attackClock += dt;
 
-    if (distance < 3.7) {
-      const toBoss = boss.position.clone().sub(player.position).normalize();
-      const facing = new THREE.Vector3(
-        Math.sin(player.rotation.y), 0, Math.cos(player.rotation.y)
-      );
+    if (boss.userData.attackClock > 1.5) {
+      boss.userData.attackClock = 0;
 
-      if (toBoss.dot(facing) > 0.15) {
-        bossHP = Math.max(0, bossHP - 18);
-        boss.position.addScaledVector(toBoss, 0.45);
-        showMessage("KATANA STRIKE!");
+      if (invulnerable <= 0) {
+        health = Math.max(0, health - 12);
+        invulnerable = 1;
         updateHUD();
+        playSound(130, 0.2);
+        createParticles(heroine.position.clone().add(new THREE.Vector3(0, 1, 0)), 0xff536d, 8);
+
+        if (health <= 0) finishGame(false);
       }
     }
   }
 
-  if (attackAnimation > 0) {
-    attackAnimation -= dt;
-    player.userData.sword.rotation.x = -Math.sin(attackAnimation * 10) * 1.4;
-  } else {
-    player.userData.sword.rotation.x = 0;
-  }
-
-  // Collect coins
-  for (const coin of coinObjects) {
-    if (coin.userData.collected) continue;
-
-    coin.rotation.y += dt * 2.5;
-
-    if (coin.position.distanceTo(player.position.clone().add(new THREE.Vector3(0, 1, 0))) < 1.1) {
-      coin.userData.collected = true;
-      coin.visible = false;
-      coins++;
-      updateHUD();
-    }
-  }
-
-  // Boss follows player
-  const bossDistance = boss.position.distanceTo(player.position);
-
-  if (bossHP > 0 && bossDistance > 1.8) {
-    const direction = player.position.clone().sub(boss.position);
-    direction.y = 0;
-    direction.normalize();
-    boss.position.addScaledVector(direction, 1.5 * dt);
-    boss.rotation.y = Math.atan2(direction.x, direction.z);
-  }
-
-  // Boss contact damage
-  if (bossDistance < 1.8 && damageCooldown <= 0) {
-    health = Math.max(0, health - 12);
-    damageCooldown = 1.0;
-    showMessage("DANGER!");
-    updateHUD();
-  }
-
-  // Boss defeated
-  if (bossHP <= 0) {
-    endGame(true);
-    showMessage("BOSS DEFEATED!");
-  }
-
-  if (health <= 0) endGame(false);
-
-  // Camera follow
-  const cameraOffset = new THREE.Vector3(
-    Math.sin(cameraYaw) * 6,
-    3.4 + cameraPitch * 2,
-    Math.cos(cameraYaw) * 6
-  );
-
-  cameraTarget.copy(player.position).add(new THREE.Vector3(0, 1.4, 0));
-
-  const desiredCamera = cameraTarget.clone().add(cameraOffset);
-  camera.position.lerp(desiredCamera, 1 - Math.pow(0.001, dt));
-  camera.lookAt(cameraTarget);
+  boss.position.x = THREE.MathUtils.clamp(boss.position.x, -14, 14);
 }
 
-// Render loop
+function updateParticles(dt) {
+  particles = particles.filter(p => {
+    p.life -= dt;
+    p.mesh.position.addScaledVector(p.velocity, dt);
+    p.velocity.y -= 6 * dt;
+    p.mesh.scale.multiplyScalar(0.97);
+
+    if (p.life <= 0) {
+      scene.remove(p.mesh);
+      p.mesh.geometry.dispose();
+      p.mesh.material.dispose();
+      return false;
+    }
+    return true;
+  });
+}
+
+function updateCamera(dt) {
+  const offset = new THREE.Vector3(
+    Math.sin(cameraAngle) * cameraDistance,
+    3.1,
+    Math.cos(cameraAngle) * cameraDistance
+  );
+
+  const desired = heroine.position.clone().add(offset);
+  camera.position.lerp(desired, Math.min(1, dt * 5));
+  camera.lookAt(heroine.position.clone().add(new THREE.Vector3(0, 1.5, 0)));
+}
+
 function animate() {
-  requestAnimationFrame(animate);
+  animationFrame = requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.04);
+  elapsed += dt;
 
-  const dt = Math.min(clock.getDelta(), 0.05);
+  if (running && !paused && !gameEnded) {
+    updatePlayer(dt);
+    updateBoss(dt);
+    updateParticles(dt);
+    updateCamera(dt);
+  } else if (heroine) {
+    updateCamera(dt);
+  }
 
-  if (playing && !paused) {
-    updateGame(dt);
+  if (boss && bossHealth > 0) {
+    boss.children[0].rotation.z = Math.sin(elapsed * 2) * 0.04;
   }
 
   renderer.render(scene, camera);
 }
 
-animate();
-
-// Responsive screen
-window.addEventListener("resize", () => {
-  camera.aspect = innerWidth / innerHeight;
+function resize() {
+  if (!camera || !renderer) return;
+  camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.7));
-});
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.7));
+}
 
-// Initial view
-buildEnvironment();
-camera.position.set(0, 4, 10);
-camera.lookAt(0, 1, 0);
+function clearWorld() {
+  if (!scene) return;
 
-document.getElementById("loading").style.display = "none";
+  for (const child of [...scene.children]) {
+    scene.remove(child);
+    child.traverse?.(object => {
+      if (object.geometry) object.geometry.dispose();
+      if (object.material) {
+        if (Array.isArray(object.material)) object.material.forEach(m => m.dispose());
+        else object.material.dispose();
+      }
+    });
+  }
+  particles = [];
+  trees = [];
+  heroine = null;
+  boss = null;
+}
+
+function startGame() {
+  running = false;
+  paused = false;
+  gameEnded = false;
+  health = 100;
+  bossHealth = 100;
+  velocityY = 0;
+  grounded = true;
+  elapsed = 0;
+  lastAttack = -1;
+  invulnerable = 0;
+  joystick.x = 0;
+  joystick.y = 0;
+  $("stick").style.transform = "translate(0,0)";
+
+  $("menu").classList.add("hidden");
+  $("result").classList.add("hidden");
+  $("pausePanel").classList.add("hidden");
+  $("hud").classList.remove("hidden");
+  $("message").textContent = "DEFEAT THE " + (
+    selectedStage === "forest" ? "FOREST DEMON" :
+    selectedStage === "ice" ? "ICE MONSTER" : "LAVA KING"
+  );
+
+  clearWorld();
+  createWorld();
+  createHeroine();
+  createBoss();
+
+  boss.position.set(0, 0, -9);
+  cameraAngle = 0;
+  updateHUD();
+  running = true;
+  playSound(500);
+}
+
+function finishGame(victory) {
+  if (gameEnded) return;
+  gameEnded = true;
+  running = false;
+
+  $("hud").classList.add("hidden");
+  $("result").classList.remove("hidden");
+  $("resultTitle").textContent = victory ? "VICTORY!" : "GAME OVER";
+  $("resultMessage").textContent = victory
+    ? "The shadow world is safe. You are a true warrior."
+    : "Your mission has failed. Train and try again.";
+  $("againBtn").textContent = victory ? "PLAY AGAIN" : "RETRY";
+  playSound(victory ? 950 : 120, 0.3);
+}
+
+function pauseGame() {
+  if (!running || gameEnded) return;
+  paused = true;
+  $("pausePanel").classList.remove("hidden");
+}
+
+function resumeGame() {
+  paused = false;
+  $("pausePanel").classList.add("hidden");
+}
+
+function goHome() {
+  running = false;
+  paused = false;
+  gameEnded = false;
+  $("hud").classList.add("hidden");
+  $("result").classList.add("hidden");
+  $("pausePanel").classList.add("hidden");
+  $("menu").classList.remove("hidden");
+  clearWorld();
+  createWorld();
+  createHeroine();
+  createBoss();
+}
+
+try {
+  init();
+} catch (error) {
+  showError(error);
+}
