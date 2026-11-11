@@ -3,94 +3,66 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <meta name="theme-color" content="#090817">
-  <title>SHADOW NINJA V3</title>
+  <title>SHADOW NINJA V4 - 3D</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <main class="app">
-    <section id="menu" class="screen">
-      <div class="brand">SHADOW <span>NINJA</span></div>
-      <p class="subtitle">FEMALE WARRIOR EDITION · V3</p>
+  <div id="loading">LOADING SHADOW WORLD...</div>
 
-      <div class="stats">
-        <span>🪙 Coins: <b id="menuCoins">0</b></span>
-        <span>🏆 Best: <b id="menuBest">0</b></span>
+  <div id="game">
+    <div id="menu" class="panel">
+      <div class="logo">SHADOW <span>NINJA</span></div>
+      <div class="version">REALISTIC ANIME 3D · V4</div>
+      <p class="intro">A new warrior. A dangerous world. One final mission.</p>
+      <div class="stage-select">
+        <button class="stage active" data-stage="0">🌙 Moonlit Forest</button>
+        <button class="stage" data-stage="1">❄️ Frozen Temple</button>
+        <button class="stage" data-stage="2">🔥 Lava Fortress</button>
       </div>
+      <button id="start" class="primary">ENTER THE SHADOW WORLD</button>
+      <p class="tip">WASD / Joystick · Mouse drag to rotate camera</p>
+    </div>
 
-      <h2>CHOOSE YOUR NINJA</h2>
-      <div class="characters">
-        <button class="character selected" data-character="akira">
-          <div class="portrait red">AK</div>
-          <b>AKIRA</b>
-          <small>Balanced Warrior</small>
-        </button>
-        <button class="character" data-character="volt">
-          <div class="portrait blue">VL</div>
-          <b>VOLT</b>
-          <small>Speed Master</small>
-        </button>
-        <button class="character" data-character="shade">
-          <div class="portrait purple">SH</div>
-          <b>SHADE</b>
-          <small>Shadow Jumper</small>
-        </button>
+    <div id="hud" class="hidden">
+      <div class="hud-top">
+        <div class="hud-card">❤️ <b id="health">100</b></div>
+        <div class="hud-card">🪙 <b id="coins">0</b></div>
+        <div class="hud-card">⚔️ <b id="stageName">MOONLIT FOREST</b></div>
+        <button id="pause" class="hud-card">Ⅱ</button>
       </div>
-
-      <h2>SELECT STAGE</h2>
-      <div class="stages">
-        <button class="stage selected" data-stage="0">
-          🌙 <b>Moonlit Forest</b><small>Stage 1 · Available</small>
-        </button>
-        <button class="stage locked" data-stage="1">
-          ❄️ <b>Frozen Temple</b><small>Stage 2 · Locked</small>
-        </button>
-        <button class="stage locked" data-stage="2">
-          🔥 <b>Lava Fortress</b><small>Stage 3 · Locked</small>
-        </button>
+      <div id="bossPanel">
+        <div id="bossName">FOREST DEMON</div>
+        <div class="bar"><div id="bossHealth"></div></div>
       </div>
+      <div id="message"></div>
+    </div>
 
-      <button id="startBtn" class="main-btn">START ADVENTURE</button>
-      <p class="hint">Defeat the boss to unlock the next stage.</p>
-    </section>
-
-    <section id="gameScreen" class="screen hidden">
-      <header class="hud">
-        <button id="menuBtn" class="small-btn">☰</button>
-        <span>❤️ <b id="health">3</b></span>
-        <span>🪙 <b id="coins">0</b></span>
-        <span>⭐ <b id="score">0</b></span>
-        <span id="stageName">MOONLIT FOREST</span>
-        <button id="pauseBtn" class="small-btn">Ⅱ</button>
-      </header>
-
-      <canvas id="game" width="960" height="540"></canvas>
-
-      <div class="controls">
-        <div class="move-controls">
-          <button id="leftBtn">◀</button>
-          <button id="rightBtn">▶</button>
-        </div>
-        <div class="action-controls">
-          <button id="attackBtn">✦</button>
-          <button id="jumpBtn">⬆</button>
-        </div>
+    <div id="mobileControls" class="hidden">
+      <div id="joystick"><div id="stick"></div></div>
+      <div class="actions">
+        <button id="jump">JUMP</button>
+        <button id="attack">ATTACK</button>
       </div>
-      <p class="control-hint">Move · Jump · Attack · Defeat the Boss</p>
-    </section>
+    </div>
 
-    <section id="overlay" class="overlay hidden">
-      <div class="result-card">
-        <h1 id="resultTitle">PAUSED</h1>
-        <p id="resultText">Take a breath, warrior.</p>
-        <button id="resumeBtn" class="main-btn">RESUME</button>
-        <button id="nextBtn" class="main-btn hidden">NEXT STAGE</button>
-        <button id="retryBtn" class="secondary-btn">RETRY</button>
-        <button id="homeBtn" class="secondary-btn">MAIN MENU</button>
-      </div>
-    </section>
-  </main>
-  <script src="game.js"></script>
+    <div id="pausePanel" class="panel hidden">
+      <h1>PAUSED</h1>
+      <button id="resume" class="primary">RESUME</button>
+      <button id="home" class="secondary">MAIN MENU</button>
+    </div>
+
+    <div id="resultPanel" class="panel hidden">
+      <h1 id="resultTitle">VICTORY</h1>
+      <p id="resultText"></p>
+      <button id="retry" class="primary">PLAY AGAIN</button>
+      <button id="resultHome" class="secondary">MAIN MENU</button>
+    </div>
+
+    <div id="help">Drag to look around · WASD to move · Space to jump · J to attack</div>
+  </div>
+
+  <script type="module" src="game.js"></script>
 </body>
 </html>
